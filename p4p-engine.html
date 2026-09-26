@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เครื่องคำนวณ P4P — รพ.ศรีสังวรสุโขทัย</title>
+    <meta name="description" content="เครื่องคำนวณและจัดสรรวงเงิน P4P กลุ่มการพยาบาล: งบประมาณ วงเงินกลุ่มวิชาชีพ ค่าตัวต่อคน หักวันลา กระจายหน่วยย่อย และ Dashboard">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root { color-scheme: light; }
+        body { font-family: 'TH Sarabun New', 'Sarabun', sans-serif; font-size: 16px; background: #f1f5f9; }
+        .num { font-variant-numeric: tabular-nums; }
+        input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #fff; }
+            .print-block { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        /* ============================================================
+           ค่าคงที่ & ค่าเริ่มต้น (อ้างอิงจากไฟล์ 6908-p4p-nur-final)
+           กลุ่มวิชาชีพ A–I = คอลัมน์ C–K ในแท็บ "แบบ 3"
+        ============================================================ */
+        const GROUPS = [
+            { k: 'A', label: 'แพทย์',            weight: 1.0,  lc: 0,    min: 2200 },
+            { k: 'B', label: 'ทันตแพทย์',        weight: 0.8,  lc: 1000, min: 2200 },
+            { k: 'C', label: 'เภสัชกร',          weight: 0.35, lc: 150,  min: 1440 },
+            { k: 'D', label: 'RN (พยาบาลวิชาชีพ)', weight: 0.25, lc: 0,    min: 1200 },
+            { k: 'E', label: 'front ป.ตรี',      weight: 0.2,  lc: 300,  min: 1200 },
+            { k: 'F', label: 'front ต่ำกว่าตรี',  weight: 0.1,  lc: 180,  min: 960  },
+            { k: 'G', label: 'back ป.ตรี',       weight: 0.1,  lc: 600,  min: 1200 },
+            { k: 'H', label: 'back ต่ำกว่าตรี',   weight: 0.05, lc: 540,  min: 960  },
+            { k: 'I', label: 'จนท.อื่น',         weight: 0.05, lc: 450,  min: 600  },
+        ];
+
+        const DEFAULT_BUDGET = {
+            annualBase: 32865435.54,   // M4 กรอบวงเงินทั้งปี (ผลงาน+คุณภาพ)
+            annualRemedy: 3515019.84,  // P4 กรอบเยียวยา 1% ทั้งปี
+            execFlat: 36000,           // N8 Flate Rate ผู้บริหาร/เดือน
+            workingDays: 20,           // วันทำการ
+            fixedRemedy: 20000,        // เยียวยาก้อนพิเศษ (เพิ่มใน P20)
+        };
+
+        // จำนวนคนตั้งต้น (แบบ 3 row 75) — องค์กรทั้งหมด
+        const DEFAULT_ORG_COUNT = { A:62, B:10, C:20, D:267, E:77, F:52, G:42, H:47, I:304 };
+
+        // หน่วยย่อยกลุ่มการพยาบาลตัวอย่าง (แก้ไข/เพิ่ม/อัปโหลดทับได้)
+        const DEFAULT_SUBUNITS = [
+            { id: 1, name: 'หอผู้ป่วย - อายุรกรรมชาย',  c: { D:16, F:0, I:10 } },
+            { id: 2, name: 'หอผู้ป่วย - อายุรกรรมหญิง',  c: { D:14, I:6 } },
+            { id: 3, name: 'งานห้องผ่าตัด',             c: { D:16, E:1, F:8, I:20 } },
+            { id: 4, name: 'งานจ่ายกลาง',               c: { D:1, F:1, I:14 } },
+            { id: 5, name: 'ICU อายุรกรรม',             c: { D:20, I:7 } },
+        ];
+
+        /* ================= utils ================= */
+        const fmt = (n, d = 0) => {
+            if (n === null || n === undefined || isNaN(n)) return '-';
+            return Number(n).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d });
+        };
+        const round0 = (n) => Math.round((n + Number.EPSILON));
+        const clean = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+
+        function useLocalState(key, initial) {
+            const [val, setVal] = useState(() => {
+                try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : initial; }
+                catch (e) { return initial; }
+            });
+            useEffect(() => {
+                try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+            }, [key, val]);
+            return [val, setVal];
+        }
+
+        /* ================= เครื่องคำนวณกลาง ================= */
+        function useEngine(budget, weights, orgCount, subunits) {
+            return useMemo(() => {
+                const B = {
+                    annualBase: clean(budget.annualBase),
+                    annualRemedy: clean(budget.annualRemedy),
+                    execFlat: clean(budget.execFlat),
+                    workingDays: clean(budget.workingDays) || 20,
+                    fixedRemedy: clean(budget.fixedRemedy),
+                };
+                // --- กรอบวงเงินรายเดือน ---
+                const M6 = B.annualBase / 12;          // กรอบ/เดือน
+                const N6 = M6 * 0.70;                   // ผลงาน 70%
+                const O6 = M6 * 0.30;                   // คุณภาพ 30%
+                const P6 = B.annualRemedy / 12;         // เยียวยา 1%/เดือน
+                const N7 = N6 - B.execFlat;             // ผลงานสุทธิหลังหักผู้บริหาร (pool หลัก)
+
+                // --- ระดับองค์กร: row77 + ค่าตัว/คน ---
+                let totalWeighted = 0;
+                GROUPS.forEach(g => { totalWeighted += clean(orgCount[g.k]) * clean(weights[g.k]); });
+
+                const groups = GROUPS.map(g => {
+                    const count = clean(orgCount[g.k]);
+                    const w = clean(weights[g.k]);
+                    const weighted = count * w;
+                    const budgetG = totalWeighted > 0 ? round0(weighted / totalWeighted * N7) : 0; // row77
+                    const perHead = count > 0 ? budgetG / count : 0;   // compare col C
+                    const perDay = B.workingDays > 0 ? perHead / B.workingDays : 0;
+                    return {
+                        ...g, count, weight: w, weighted, budgetG, perHead, perDay,
+                        d50: perDay * 0.5, d25: perDay * 0.25, d10: perDay * 0.1, d5: perDay * 0.05,
+                    };
+                });
+                const sumGroupBudget = groups.reduce((s, g) => s + g.budgetG, 0);
+
+                // --- ระดับกลุ่มการพยาบาล: N20 / P20 / Q20 + กระจายหน่วยย่อย ---
+                let nursingWeighted = 0, nursingLC = 0, nursingHead = 0;
+                const subCalc = subunits.map(su => {
+                    let w = 0, lc = 0, head = 0;
+                    GROUPS.forEach(g => {
+                        const c = clean((su.c || {})[g.k]);
+                        w += c * clean(weights[g.k]);
+                        lc += c * g.lc;
+                        head += c;
+                    });
+                    nursingWeighted += w; nursingLC += lc; nursingHead += head;
+                    return { ...su, weighted: w, lc, head };
+                });
+                const N20 = totalWeighted > 0 ? round0(nursingWeighted / totalWeighted * N7) : 0; // ผลงานพยาบาล
+                const P20 = round0(nursingLC + B.fixedRemedy);   // เยียวยา/LC
+                const Q20 = N20 + P20;
+
+                const subs = subCalc.map(su => {
+                    const perfBudget = nursingWeighted > 0 ? round0(su.weighted / nursingWeighted * N20) : 0;
+                    const remedy = round0(su.lc);
+                    return { ...su, perfBudget, remedy, total: perfBudget + remedy };
+                });
+                const sumSubPerf = subs.reduce((s, x) => s + x.perfBudget, 0);
+
+                return {
+                    B, M6, N6, O6, P6, N7,
+                    totalWeighted, groups, sumGroupBudget,
+                    nursingWeighted, nursingHead, N20, P20, Q20, subs, sumSubPerf,
+                };
+            }, [budget, weights, orgCount, subunits]);
+        }
+
+        /* ================= UI ชิ้นเล็ก ================= */
+        const Card = ({ title, children, className = '' }) => (
+            <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 p-5 print-block ${className}`}>
+                {title && <h3 className="text-lg font-bold text-teal-800 mb-3">{title}</h3>}
+                {children}
+            </div>
+        );
+        const Stat = ({ label, value, sub, color = 'teal' }) => {
+            const c = { teal: 'from-teal-500 to-cyan-500', blue: 'from-sky-500 to-blue-500', amber: 'from-amber-500 to-orange-500', violet: 'from-violet-500 to-purple-500', rose: 'from-rose-500 to-pink-500' }[color];
+            return (
+                <div className={`rounded-2xl p-4 text-white bg-gradient-to-br ${c} shadow`}>
+                    <div className="text-sm/5 opacity-90">{label}</div>
+                    <div className="text-2xl font-extrabold num mt-1">{value}</div>
+                    {sub && <div className="text-xs opacity-90 mt-0.5">{sub}</div>}
+                </div>
+            );
+        };
+        const NumInput = ({ value, onChange, className = '', step = 'any' }) => (
+            <input type="number" step={step} value={value} onChange={e => onChange(e.target.value)}
+                className={`w-full px-2 py-1 rounded-lg border border-slate-300 text-right num focus:ring-2 focus:ring-teal-400 focus:border-teal-400 outline-none ${className}`} />
+        );
+        const Bar = ({ value, max, color = '#0d9488', label, right }) => (
+            <div className="flex items-center gap-2 text-sm">
+                <div className="w-40 shrink-0 truncate" title={label}>{label}</div>
+                <div className="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden">
+                    <div className="h-5 rounded-full" style={{ width: `${max > 0 ? Math.max(2, value / max * 100) : 0}%`, background: color }}></div>
+                </div>
+                <div className="w-28 text-right num font-semibold">{right}</div>
+            </div>
+        );
+
+        /* ================= แท็บ 1: งบประมาณ + น้ำหนัก ================= */
+        function BudgetTab({ budget, setBudget, weights, setWeights, eng }) {
+            const rows = [
+                ['annualBase', 'กรอบวงเงินทั้งปี (ผลงาน+คุณภาพ) — M4', 2],
+                ['annualRemedy', 'กรอบเงินเยียวยา 1% ทั้งปี — P4', 2],
+                ['execFlat', 'Flate Rate ผู้บริหาร/เดือน — N8', 0],
+                ['workingDays', 'วันทำการต่อเดือน', 0],
+                ['fixedRemedy', 'เงินเยียวยาก้อนพิเศษ (บวกใน P20)', 0],
+            ];
+            return (
+                <div className="grid lg:grid-cols-2 gap-5">
+                    <Card title="① กรอบวงเงิน (ตั้งค่ารายเดือน)">
+                        <table className="w-full text-sm">
+                            <tbody>
+                                {rows.map(([key, label]) => (
+                                    <tr key={key} className="border-b border-slate-100">
+                                        <td className="py-2 pr-2">{label}</td>
+                                        <td className="py-2 w-40"><NumInput value={budget[key]} onChange={v => setBudget({ ...budget, [key]: v })} /></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-slate-500">กรอบ/เดือน (M6)</div><div className="text-lg font-bold num">{fmt(eng.M6)}</div></div>
+                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-slate-500">ผลงาน 70% (N6)</div><div className="text-lg font-bold num">{fmt(eng.N6)}</div></div>
+                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-slate-500">คุณภาพ 30% (O6)</div><div className="text-lg font-bold num">{fmt(eng.O6)}</div></div>
+                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-slate-500">เยียวยา 1%/เดือน (P6)</div><div className="text-lg font-bold num">{fmt(eng.P6)}</div></div>
+                            <div className="col-span-2 bg-teal-50 border border-teal-200 rounded-xl p-3">
+                                <div className="text-teal-700 font-semibold">วงเงินผลงานสุทธิ N7 = N6 − ผู้บริหาร</div>
+                                <div className="text-2xl font-extrabold text-teal-800 num">{fmt(eng.N7)}</div>
+                            </div>
+                        </div>
+                    </Card>
+                    <Card title="② น้ำหนักกลุ่มวิชาชีพ (row 6 ในแบบ 3)">
+                        <p className="text-sm text-slate-500 mb-2">แก้น้ำหนักให้ตรงกับประกาศของเดือนนั้น</p>
+                        <table className="w-full text-sm">
+                            <thead><tr className="text-left text-slate-500 border-b"><th className="py-1">กลุ่ม</th><th>วิชาชีพ</th><th className="w-28 text-right">น้ำหนัก</th></tr></thead>
+                            <tbody>
+                                {GROUPS.map(g => (
+                                    <tr key={g.k} className="border-b border-slate-100">
+                                        <td className="py-1.5 font-bold text-teal-700">{g.k}</td>
+                                        <td>{g.label}</td>
+                                        <td><NumInput value={weights[g.k]} onChange={v => setWeights({ ...weights, [g.k]: v })} /></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </Card>
+                </div>
+            );
+        }
+
+        /* ================= แท็บ 2: วงเงินกลุ่ม + ค่าตัว/คน ================= */
+        function GroupTab({ orgCount, setOrgCount, eng }) {
+            const chk = eng.sumGroupBudget;
+            return (
+                <div className="space-y-5">
+                    <Card title="③ วงเงินแต่ละกลุ่มวิชาชีพ (row 77) และค่าตัวต่อคน">
+                        <div className="overflow-x-auto">
+                        <table className="w-full text-sm num">
+                            <thead>
+                                <tr className="text-slate-500 border-b-2 border-slate-200 [&>th]:py-2 [&>th]:px-2 text-right">
+                                    <th className="text-left">กลุ่ม</th><th className="text-left">วิชาชีพ</th>
+                                    <th>จำนวนคน</th><th>น้ำหนัก</th><th>สัดส่วน</th>
+                                    <th className="text-teal-700">วงเงินกลุ่ม (row77)</th>
+                                    <th className="text-blue-700">ค่าตัว/คน</th><th>ค่าตัว/วัน</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {eng.groups.map(g => (
+                                    <tr key={g.k} className="border-b border-slate-100 [&>td]:py-1.5 [&>td]:px-2 text-right hover:bg-slate-50">
+                                        <td className="text-left font-bold text-teal-700">{g.k}</td>
+                                        <td className="text-left">{g.label}</td>
+                                        <td className="w-24"><NumInput value={orgCount[g.k] ?? 0} onChange={v => setOrgCount({ ...orgCount, [g.k]: v })} /></td>
+                                        <td>{fmt(g.weight, 2)}</td>
+                                        <td>{fmt(g.weighted, 2)}</td>
+                                        <td className="font-bold text-teal-800">{fmt(g.budgetG)}</td>
+                                        <td className="font-bold text-blue-800">{fmt(g.perHead)}</td>
+                                        <td>{fmt(g.perDay)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot>
+                                <tr className="border-t-2 border-slate-300 font-extrabold [&>td]:py-2 [&>td]:px-2 text-right bg-slate-50">
+                                    <td className="text-left" colSpan="2">รวม</td>
+                                    <td>{fmt(eng.groups.reduce((s,g)=>s+g.count,0))}</td>
+                                    <td></td><td>{fmt(eng.totalWeighted,2)}</td>
+                                    <td className="text-teal-800">{fmt(chk)}</td>
+                                    <td colSpan="2"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        </div>
+                        <div className={`mt-3 text-sm rounded-lg px-3 py-2 ${Math.abs(chk - eng.N7) <= 5 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                            ตรวจสมดุล: รวมวงเงินกลุ่ม {fmt(chk)} เทียบ N7 {fmt(eng.N7)} — ผลต่าง {fmt(chk - eng.N7)} {Math.abs(chk - eng.N7) <= 5 ? '✓ สมดุล' : '⚠ ตรวจน้ำหนัก/จำนวนคน'}
+                        </div>
+                    </Card>
+
+                    <Card title="ประมาณการหักเงินต่อวันลา (ตามค่าตัว/วัน)">
+                        <div className="overflow-x-auto">
+                        <table className="w-full text-sm num">
+                            <thead><tr className="text-slate-500 border-b [&>th]:py-2 [&>th]:px-2 text-right"><th className="text-left">กลุ่ม</th><th>ค่าตัว/วัน</th><th>หัก 50%</th><th>หัก 25%</th><th>หัก 10%</th><th>หัก 5%</th></tr></thead>
+                            <tbody>
+                                {eng.groups.map(g => (
+                                    <tr key={g.k} className="border-b border-slate-100 [&>td]:py-1.5 [&>td]:px-2 text-right">
+                                        <td className="text-left font-bold text-teal-700">{g.k} · {g.label}</td>
+                                        <td>{fmt(g.perDay)}</td><td>{fmt(g.d50)}</td><td>{fmt(g.d25)}</td><td>{fmt(g.d10)}</td><td>{fmt(g.d5)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        </div>
+                    </Card>
+                </div>
+            );
+        }
+
+        /* ================= แท็บ 3: กระจายหน่วยย่อยพยาบาล ================= */
+        function DistributeTab({ subunits, setSubunits, eng }) {
+            const addUnit = () => setSubunits([...subunits, { id: Date.now(), name: 'หน่วยใหม่', c: {} }]);
+            const delUnit = (id) => setSubunits(subunits.filter(s => s.id !== id));
+            const setName = (id, name) => setSubunits(subunits.map(s => s.id === id ? { ...s, name } : s));
+            const setC = (id, k, v) => setSubunits(subunits.map(s => s.id === id ? { ...s, c: { ...s.c, [k]: clean(v) } } : s));
+            return (
+                <div className="space-y-5">
+                    <div className="grid sm:grid-cols-3 gap-4">
+                        <Stat label="N20 · ผลงานพยาบาล" value={fmt(eng.N20)} color="teal" />
+                        <Stat label="P20 · เยียวยา/LC" value={fmt(eng.P20)} color="amber" />
+                        <Stat label="Q20 · รวมกลุ่มพยาบาล" value={fmt(eng.Q20)} color="violet" />
+                    </div>
+                    <Card title="④ กระจายวงเงินลงหน่วยย่อย (จำนวนคนแยกกลุ่ม A–I)">
+                        <div className="overflow-x-auto">
+                        <table className="w-full text-sm num">
+                            <thead>
+                                <tr className="text-slate-500 border-b-2 [&>th]:py-2 [&>th]:px-1 text-center">
+                                    <th className="text-left px-2">หน่วยย่อย</th>
+                                    {GROUPS.map(g => <th key={g.k} title={g.label}>{g.k}</th>)}
+                                    <th>คน</th><th>สัดส่วน</th><th className="text-teal-700">ผลงาน</th><th className="text-amber-700">เยียวยา</th><th className="text-violet-700">รวม</th><th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {eng.subs.map(su => (
+                                    <tr key={su.id} className="border-b border-slate-100 [&>td]:py-1 [&>td]:px-1 text-center hover:bg-slate-50">
+                                        <td className="text-left px-2 w-52"><input value={su.name} onChange={e => setName(su.id, e.target.value)} className="w-full px-2 py-1 rounded border border-slate-200 focus:border-teal-400 outline-none" /></td>
+                                        {GROUPS.map(g => (
+                                            <td key={g.k} className="w-12">
+                                                <input type="number" value={(su.c || {})[g.k] ?? ''} onChange={e => setC(su.id, g.k, e.target.value)}
+                                                    className="w-12 px-1 py-1 rounded border border-slate-200 text-center num focus:border-teal-400 outline-none" />
+                                            </td>
+                                        ))}
+                                        <td className="font-semibold">{fmt(su.head)}</td>
+                                        <td>{fmt(su.weighted, 1)}</td>
+                                        <td className="font-bold text-teal-800">{fmt(su.perfBudget)}</td>
+                                        <td className="font-bold text-amber-700">{fmt(su.remedy)}</td>
+                                        <td className="font-bold text-violet-800">{fmt(su.total)}</td>
+                                        <td><button onClick={() => delUnit(su.id)} className="text-rose-500 hover:text-rose-700 px-1" title="ลบ">✕</button></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot>
+                                <tr className="border-t-2 border-slate-300 font-extrabold bg-slate-50 [&>td]:py-2 [&>td]:px-1 text-center">
+                                    <td className="text-left px-2">รวม</td>
+                                    <td colSpan={GROUPS.length}></td>
+                                    <td>{fmt(eng.nursingHead)}</td>
+                                    <td>{fmt(eng.nursingWeighted, 1)}</td>
+                                    <td className="text-teal-800">{fmt(eng.sumSubPerf)}</td>
+                                    <td colSpan="3"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between">
+                            <button onClick={addUnit} className="no-print px-4 py-2 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700">+ เพิ่มหน่วยย่อย</button>
+                            <div className={`text-sm rounded-lg px-3 py-2 ${Math.abs(eng.sumSubPerf - eng.N20) <= 20 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                รวมกระจาย {fmt(eng.sumSubPerf)} เทียบ N20 {fmt(eng.N20)} · ผลต่าง {fmt(eng.sumSubPerf - eng.N20)} (เศษปัดเศษ)
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+            );
+        }
+
+        /* ================= แท็บ 4: Dashboard ================= */
+        function Dashboard({ eng, month }) {
+            const maxG = Math.max(...eng.groups.map(g => g.budgetG), 1);
+            const maxS = Math.max(...eng.subs.map(s => s.total), 1);
+            const totalHead = eng.groups.reduce((s, g) => s + g.count, 0);
+            const palette = ['#0d9488','#0891b2','#2563eb','#7c3aed','#db2777','#e11d48','#ea580c','#ca8a04','#65a30d'];
+            return (
+                <div className="space-y-5">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <Stat label="วงเงินผลงานสุทธิ N7" value={fmt(eng.N7)} sub="หลังหักผู้บริหาร" color="teal" />
+                        <Stat label="วงเงินกลุ่มพยาบาล Q20" value={fmt(eng.Q20)} sub={`ผลงาน ${fmt(eng.N20)} + เยียวยา ${fmt(eng.P20)}`} color="violet" />
+                        <Stat label="บุคลากรทั้งหมด" value={fmt(totalHead)} sub={`พยาบาล ${fmt(eng.nursingHead)} คน`} color="blue" />
+                        <Stat label="เยียวยา 1%/เดือน P6" value={fmt(eng.P6)} sub={`เดือน ${month}`} color="amber" />
+                    </div>
+                    <div className="grid lg:grid-cols-2 gap-5">
+                        <Card title="วงเงินตามกลุ่มวิชาชีพ (row 77)">
+                            <div className="space-y-2">
+                                {eng.groups.map((g, i) => <Bar key={g.k} label={`${g.k} · ${g.label}`} value={g.budgetG} max={maxG} color={palette[i % palette.length]} right={fmt(g.budgetG)} />)}
+                            </div>
+                        </Card>
+                        <Card title="ค่าตัวต่อคน แต่ละกลุ่ม">
+                            <div className="space-y-2">
+                                {eng.groups.map((g, i) => <Bar key={g.k} label={`${g.k} · ${g.label}`} value={g.perHead} max={Math.max(...eng.groups.map(x=>x.perHead),1)} color={palette[i % palette.length]} right={fmt(g.perHead)} />)}
+                            </div>
+                        </Card>
+                        <Card title="วงเงินรวมตามหน่วยย่อย (พยาบาล)" className="lg:col-span-2">
+                            <div className="space-y-2">
+                                {eng.subs.length === 0 && <p className="text-slate-400 text-sm">ยังไม่มีหน่วยย่อย — เพิ่มในแท็บ "กระจายหน่วยย่อย"</p>}
+                                {eng.subs.slice().sort((a,b)=>b.total-a.total).map((s, i) => <Bar key={s.id} label={s.name} value={s.total} max={maxS} color={palette[i % palette.length]} right={fmt(s.total)} />)}
+                            </div>
+                        </Card>
+                    </div>
+                </div>
+            );
+        }
+
+        /* ================= อัปโหลด แบบ3 ================= */
+        // อ่านชีตหา row น้ำหนัก / row75 (รวมทั้งสิ้น) / row77 (วงเงินกลุ่ม)
+        function parseWorkbook(wb) {
+            const result = { orgCount: null, weights: null, found: [] };
+            let bestTotal = -1;
+            for (const name of wb.SheetNames) {
+                const ws = wb.Sheets[name];
+                const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false });
+                for (let i = 0; i < rows.length; i++) {
+                    const first = (rows[i][0] || '').toString();
+                    // แถว "รวมทั้งสิ้น" = จำนวนคนแยกกลุ่ม A–I (คอลัมน์ C..K = index 2..10)
+                    // เลือกแถวที่ยอดรวมมากที่สุด = ระดับองค์กร (row 75) ไม่ใช่ยอดพยาบาลย่อย
+                    if (first.includes('รวมทั้งสิ้น')) {
+                        const oc = {};
+                        GROUPS.forEach((g, idx) => { oc[g.k] = clean(rows[i][2 + idx]); });
+                        const tot = Object.values(oc).reduce((s, v) => s + v, 0);
+                        if (tot > bestTotal && tot > 0) {
+                            bestTotal = tot; result.orgCount = oc;
+                            result.found = result.found.filter(x => !x.includes('จำนวนคน'));
+                            result.found.push(`${name}: จำนวนคน ${tot} คน (แถวรวมทั้งสิ้น)`);
+                        }
+                    }
+                }
+                // หา row น้ำหนัก: แถวที่คอลัมน์ C=1 และค่าถัดไปเป็นทศนิยม <=1
+                for (let i = 0; i < Math.min(rows.length, 12); i++) {
+                    const c = clean(rows[i][2]), d = clean(rows[i][3]);
+                    if (c === 1 && d > 0 && d < 1) {
+                        const w = {};
+                        GROUPS.forEach((g, idx) => { w[g.k] = clean(rows[i][2 + idx]); });
+                        if (w.A === 1) { result.weights = w; result.found.push(`${name}: น้ำหนักกลุ่ม`); break; }
+                    }
+                }
+            }
+            return result;
+        }
+
+        /* ================= แอปหลัก ================= */
+        function App() {
+            const [tab, setTab] = useLocalState('p4p_tab', 'dash');
+            const [month, setMonth] = useLocalState('p4p_month', 'ส.ค. 2569');
+            const [budget, setBudget] = useLocalState('p4p_budget', DEFAULT_BUDGET);
+            const [weights, setWeights] = useLocalState('p4p_weights', Object.fromEntries(GROUPS.map(g => [g.k, g.weight])));
+            const [orgCount, setOrgCount] = useLocalState('p4p_orgcount', DEFAULT_ORG_COUNT);
+            const [subunits, setSubunits] = useLocalState('p4p_subunits', DEFAULT_SUBUNITS);
+            const [toast, setToast] = useState('');
+            const fileRef = useRef();
+
+            const eng = useEngine(budget, weights, orgCount, subunits);
+
+            const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 3500); };
+
+            const onFile = (e) => {
+                const f = e.target.files[0]; if (!f) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        const wb = XLSX.read(ev.target.result, { type: 'array' });
+                        const r = parseWorkbook(wb);
+                        if (r.orgCount) setOrgCount(r.orgCount);
+                        if (r.weights) setWeights(r.weights);
+                        if (r.found.length) showToast('อ่านไฟล์สำเร็จ: ' + r.found.join(' · '));
+                        else showToast('⚠ ไม่พบแถว "รวมทั้งสิ้น"/น้ำหนัก — โปรดกรอก/แก้ในตารางเอง');
+                    } catch (err) { showToast('❌ อ่านไฟล์ไม่สำเร็จ: ' + err.message); }
+                };
+                reader.readAsArrayBuffer(f);
+                e.target.value = '';
+            };
+
+            const exportExcel = () => {
+                const wb = XLSX.utils.book_new();
+                // 1) วงเงินกลุ่ม
+                const g = [['กลุ่ม','วิชาชีพ','จำนวนคน','น้ำหนัก','สัดส่วน','วงเงินกลุ่ม(row77)','ค่าตัว/คน','ค่าตัว/วัน','หัก50%','หัก25%','หัก10%','หัก5%']];
+                eng.groups.forEach(x => g.push([x.k,x.label,x.count,x.weight,+x.weighted.toFixed(2),x.budgetG,+x.perHead.toFixed(2),+x.perDay.toFixed(2),+x.d50.toFixed(2),+x.d25.toFixed(2),+x.d10.toFixed(2),+x.d5.toFixed(2)]));
+                g.push(['รวม','',eng.groups.reduce((s,x)=>s+x.count,0),'',+eng.totalWeighted.toFixed(2),eng.sumGroupBudget,'','','','','','']);
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(g), 'วงเงินกลุ่ม');
+                // 2) กระจายหน่วยย่อย
+                const s = [['หน่วยย่อย', ...GROUPS.map(x=>x.k),'จำนวนคน','สัดส่วน','ผลงาน','เยียวยา','รวม']];
+                eng.subs.forEach(su => s.push([su.name, ...GROUPS.map(x=>(su.c||{})[x.k]||0), su.head, +su.weighted.toFixed(2), su.perfBudget, su.remedy, su.total]));
+                s.push(['รวม', ...GROUPS.map(()=>''), eng.nursingHead, +eng.nursingWeighted.toFixed(2), eng.sumSubPerf, '', '']);
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s), 'กระจายหน่วยย่อย');
+                // 3) สรุปงบ
+                const b = [['รายการ','ค่า'],
+                    ['เดือน', month],
+                    ['กรอบ/เดือน (M6)', +eng.M6.toFixed(2)],['ผลงาน 70% (N6)', +eng.N6.toFixed(2)],
+                    ['คุณภาพ 30% (O6)', +eng.O6.toFixed(2)],['เยียวยา 1%/เดือน (P6)', +eng.P6.toFixed(2)],
+                    ['ผลงานสุทธิ (N7)', +eng.N7.toFixed(2)],
+                    ['N20 ผลงานพยาบาล', eng.N20],['P20 เยียวยา/LC', eng.P20],['Q20 รวมพยาบาล', eng.Q20]];
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(b), 'สรุปงบ');
+                XLSX.writeFile(wb, `P4P-${month.replace(/\s/g,'')}.xlsx`);
+                showToast('ดาวน์โหลดไฟล์ Excel แล้ว');
+            };
+
+            const resetAll = () => {
+                if (!confirm('ล้างข้อมูลทั้งหมดกลับค่าเริ่มต้น?')) return;
+                setBudget(DEFAULT_BUDGET); setWeights(Object.fromEntries(GROUPS.map(g=>[g.k,g.weight])));
+                setOrgCount(DEFAULT_ORG_COUNT); setSubunits(DEFAULT_SUBUNITS); showToast('รีเซ็ตแล้ว');
+            };
+
+            const tabs = [
+                ['dash', '📊 Dashboard'], ['budget', '① งบประมาณ'],
+                ['group', '② วงเงินกลุ่ม+ค่าตัว'], ['dist', '③ กระจายหน่วยย่อย'],
+            ];
+
+            return (
+                <div className="min-h-screen">
+                    {/* header */}
+                    <header className="bg-gradient-to-r from-teal-700 to-cyan-600 text-white shadow-lg">
+                        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center gap-3 justify-between">
+                            <div>
+                                <h1 className="text-xl sm:text-2xl font-extrabold">เครื่องคำนวณ P4P — กลุ่มการพยาบาล</h1>
+                                <p className="text-sm opacity-90">รพ.ศรีสังวรสุโขทัย · คำนวณครบทั้งสาย: งบ → วงเงินกลุ่ม → ค่าตัว → กระจายหน่วยย่อย</p>
+                            </div>
+                            <div className="flex items-center gap-2 no-print">
+                                <input value={month} onChange={e => setMonth(e.target.value)} className="px-3 py-1.5 rounded-lg text-slate-800 num w-32 text-center font-semibold" title="เดือนที่คำนวณ" />
+                                <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile} className="hidden" />
+                                <button onClick={() => fileRef.current.click()} className="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 font-semibold">📥 อัปโหลด แบบ3</button>
+                                <button onClick={exportExcel} className="px-3 py-1.5 rounded-lg bg-white text-teal-700 font-bold hover:bg-teal-50">📤 Export</button>
+                                <button onClick={() => window.print()} className="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 font-semibold">🖨️ พิมพ์</button>
+                                <button onClick={resetAll} className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm">รีเซ็ต</button>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* tabs */}
+                    <nav className="bg-white border-b border-slate-200 sticky top-0 z-10 no-print shadow-sm">
+                        <div className="max-w-7xl mx-auto px-4 flex gap-1 overflow-x-auto">
+                            {tabs.map(([k, label]) => (
+                                <button key={k} onClick={() => setTab(k)}
+                                    className={`px-4 py-3 font-bold whitespace-nowrap border-b-2 transition ${tab === k ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-teal-600'}`}>
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    </nav>
+
+                    <main className="max-w-7xl mx-auto px-4 py-6">
+                        {tab === 'dash' && <Dashboard eng={eng} month={month} />}
+                        {tab === 'budget' && <BudgetTab budget={budget} setBudget={setBudget} weights={weights} setWeights={setWeights} eng={eng} />}
+                        {tab === 'group' && <GroupTab orgCount={orgCount} setOrgCount={setOrgCount} eng={eng} />}
+                        {tab === 'dist' && <DistributeTab subunits={subunits} setSubunits={setSubunits} eng={eng} />}
+                    </main>
+
+                    <footer className="max-w-7xl mx-auto px-4 py-6 text-center text-xs text-slate-400">
+                        ข้อมูลเก็บในเครื่องนี้ (localStorage) เท่านั้น · <a href="index.html" className="text-teal-600 underline">ไปหน้าจัดสรรรายคน (แอปเดิม)</a>
+                    </footer>
+
+                    {toast && (
+                        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-5 py-3 rounded-xl shadow-lg text-sm no-print z-50 max-w-[90vw]">{toast}</div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
