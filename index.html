@@ -61,6 +61,9 @@
     <!-- นำเข้า Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
+    <!-- SheetJS สำหรับอ่านไฟล์ Excel/CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
     <!-- ฟอนต์ไทยไม่มีหัว ทันสมัย: Anuphan (หลัก) + Noto Sans Thai (สำรอง) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -206,6 +209,8 @@
 
             const [isSaving, setIsSaving] = useState(false);
             const [isLoadingBudget, setIsLoadingBudget] = useState(false);
+            const [isBudgetDragOver, setIsBudgetDragOver] = useState(false);
+            const [isImportingBudget, setIsImportingBudget] = useState(false);
             const [toastMessage, setToastMessage] = useState('');
 
             // --- ดึงข้อมูล departments ว่างเปล่าไว้ก่อน (ดึงจากชีตเท่านั้น) ---
@@ -498,6 +503,72 @@
                     arr[row][col] += cc;
                 }
                 return arr;
+            };
+
+            // ===== นำเข้าวงเงินจากไฟล์ Excel/CSV (ลากวาง/อัปโหลด) → ดึงค่า 8% และ 1% =====
+            const toFloat = (v) => {
+                const n = parseFloat(String(v).replace(/[,\s฿บาท]/gi, ''));
+                return isNaN(n) ? null : n;
+            };
+            const importBudgetFromFile = async (file) => {
+                if (!file) return;
+                const okExt = /\.(xlsx|xls|csv|txt)$/i.test(file.name);
+                if (!okExt) { setToastMessage('❌ รองรับเฉพาะไฟล์ Excel (.xlsx/.xls) หรือ CSV'); setTimeout(() => setToastMessage(''), 3000); return; }
+                if (typeof XLSX === 'undefined') { setToastMessage('❌ โหลดตัวอ่านไฟล์ไม่สำเร็จ (ตรวจอินเทอร์เน็ต)'); setTimeout(() => setToastMessage(''), 3500); return; }
+                setIsImportingBudget(true);
+                try {
+                    const buf = await file.arrayBuffer();
+                    const wb = XLSX.read(buf, { type: 'array' });
+                    const ws = wb.Sheets[wb.SheetNames[0]];
+                    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' });
+
+                    // แปลงเป็นลิสต์เซลล์เรียงลำดับ (row, col) พร้อมข้อความและตัวเลข
+                    const cells = [];
+                    rows.forEach((row, r) => (row || []).forEach((val, c) => {
+                        cells.push({ r, c, text: String(val).trim(), num: toFloat(val) });
+                    }));
+
+                    // หาเลขที่อยู่ "ใกล้" ป้ายกำกับมากที่สุด (ขวาในแถวเดียวกัน → ล่างในคอลัมน์เดียวกัน → ถัดไป)
+                    const findNear = (idx) => {
+                        const label = cells[idx];
+                        const sameRowRight = cells.filter(x => x.r === label.r && x.c > label.c && x.num !== null).sort((a, b) => a.c - b.c)[0];
+                        if (sameRowRight) return sameRowRight.num;
+                        const sameColDown = cells.filter(x => x.c === label.c && x.r > label.r && x.num !== null).sort((a, b) => a.r - b.r)[0];
+                        if (sameColDown) return sameColDown.num;
+                        const after = cells.slice(idx + 1).find(x => x.num !== null);
+                        return after ? after.num : null;
+                    };
+
+                    const idx8 = cells.findIndex(x => x.num === null && /8\s*%/.test(x.text));
+                    const idxExtra = cells.findIndex(x => x.num === null && /1\s*%/.test(x.text) && /(เพิ่ม|extra)/i.test(x.text));
+                    const idx1 = cells.findIndex((x, i) => x.num === null && /1\s*%/.test(x.text) && i !== idxExtra && !/(เพิ่ม|extra)/i.test(x.text));
+
+                    let v8 = idx8 !== -1 ? findNear(idx8) : null;
+                    let v1 = idx1 !== -1 ? findNear(idx1) : null;
+                    let vExtra = idxExtra !== -1 ? findNear(idxExtra) : null;
+
+                    // สำรอง: ถ้าหาจากป้ายไม่ได้ ใช้ขนาดตัวเลข (มากสุด = 8%, รองลงมา = 1%)
+                    if (v8 === null || v1 === null) {
+                        const nums = cells.map(x => x.num).filter(n => n !== null && n > 0).sort((a, b) => b - a);
+                        if (v8 === null && nums.length) v8 = nums[0];
+                        if (v1 === null && nums.length > 1) v1 = nums[1];
+                    }
+
+                    if (v8 === null && v1 === null && vExtra === null) {
+                        setToastMessage('❌ ไม่พบตัวเลขวงเงินในไฟล์'); setTimeout(() => setToastMessage(''), 3000); return;
+                    }
+                    if (v8 !== null) setBudget8Percent(v8.toFixed(2));
+                    if (v1 !== null) setBudget1PercentState(v1.toFixed(2));
+                    if (vExtra !== null) setBudget1PercentExtraState(vExtra.toFixed(2));
+                    setToastMessage(`✅ นำเข้าวงเงินแล้ว${v8 !== null ? ` · 8% ${v8.toLocaleString('th-TH')}` : ''}${v1 !== null ? ` · 1% ${v1.toLocaleString('th-TH')}` : ''}`);
+                    setTimeout(() => setToastMessage(''), 3500);
+                } catch (err) {
+                    console.error(err);
+                    setToastMessage('❌ อ่านไฟล์ไม่สำเร็จ'); setTimeout(() => setToastMessage(''), 3000);
+                } finally {
+                    setIsImportingBudget(false);
+                    setIsBudgetDragOver(false);
+                }
             };
 
             const fetchStaffData = async () => {
@@ -1746,7 +1817,19 @@
                         <>
                             {/* --- Dashboard Cards --- */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                                <div className="h-full bg-gradient-to-br from-teal-600 to-teal-800 rounded-2xl shadow-premium p-4 md:p-5 flex flex-col gap-3 transform hover:-translate-y-1 transition-transform border border-teal-500">
+                                <div
+                                    onDragOver={(e) => { e.preventDefault(); setIsBudgetDragOver(true); }}
+                                    onDragLeave={(e) => { e.preventDefault(); setIsBudgetDragOver(false); }}
+                                    onDrop={(e) => { e.preventDefault(); setIsBudgetDragOver(false); if (e.dataTransfer.files && e.dataTransfer.files[0]) importBudgetFromFile(e.dataTransfer.files[0]); }}
+                                    className={`relative overflow-hidden h-full bg-gradient-to-br from-teal-600 to-teal-800 rounded-2xl shadow-premium p-4 md:p-5 flex flex-col gap-3 transform hover:-translate-y-1 transition-transform border ${isBudgetDragOver ? 'border-emerald-300 ring-4 ring-emerald-300/60' : 'border-teal-500'}`}>
+                                    {/* โอเวอร์เลย์ขณะลากไฟล์ / กำลังนำเข้า */}
+                                    {(isBudgetDragOver || isImportingBudget) && (
+                                        <div className="absolute inset-0 z-20 bg-teal-900/80 backdrop-blur-sm flex flex-col items-center justify-center gap-2 text-white rounded-2xl border-2 border-dashed border-emerald-300 pointer-events-none">
+                                            {isImportingBudget
+                                                ? (<><RefreshCw size={30} className="animate-spin text-emerald-200" /><p className="font-bold text-sm">กำลังอ่านไฟล์...</p></>)
+                                                : (<><Save size={30} className="text-emerald-200 animate-bounce" /><p className="font-bold text-sm">วางไฟล์ Excel / CSV ที่นี่</p></>)}
+                                        </div>
+                                    )}
                                     <div className="flex justify-between items-start gap-2">
                                         <div className="flex items-center gap-3">
                                             <div className="p-2.5 bg-white/20 rounded-full text-white backdrop-blur-sm shrink-0">
@@ -1788,6 +1871,13 @@
                                             <span className="font-extrabold text-white text-sm py-0.5">{parseFloat(budget1PercentExtraState).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                         </div>
                                     </div>
+                                    {/* แถบลากวาง/อัปโหลดไฟล์ เพื่อดึงค่า 8% และ 1% */}
+                                    <label className="group flex items-center justify-center gap-2 cursor-pointer rounded-xl border border-dashed border-emerald-300/70 bg-teal-900/30 hover:bg-teal-900/50 text-teal-100 hover:text-white px-3 py-2 text-[11px] lg:text-xs font-semibold transition-all">
+                                        <Save size={14} className="text-emerald-200 group-hover:scale-110 transition-transform" />
+                                        <span>ลากไฟล์ Excel/CSV มาวาง หรือ <span className="underline underline-offset-2">คลิกเพื่ออัปโหลด</span> (ดึงค่า 8% และ 1%)</span>
+                                        <input type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden"
+                                            onChange={(e) => { if (e.target.files && e.target.files[0]) importBudgetFromFile(e.target.files[0]); e.target.value = ''; }} />
+                                    </label>
                                     <div className="flex justify-between items-end border-t border-teal-500/50 pt-3 mt-auto w-full">
                                         <div><span className="text-xs font-medium text-teal-100 block mb-0.5">รวมทั้งสิ้น</span><p className="text-lg lg:text-xl font-bold drop-shadow-sm">{formatCurrency(totalGroupBudget)}</p></div>
                                         <button onClick={handleSaveToSheet} disabled={isSaving} className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
