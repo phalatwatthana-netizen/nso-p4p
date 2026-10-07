@@ -100,6 +100,7 @@
             // --- State Management ---
             const [currentView, setCurrentView] = useState('admin');
             const [selectedWardDept, setSelectedWardDept] = useState(null);
+            const [adminSection, setAdminSection] = useState(null); // null = หน้าเลือกการ์ดเมนู Admin
 
             const [selectedMonth, setSelectedMonth] = useState(() => {
                 const months = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
@@ -1023,7 +1024,7 @@
                                 <button onClick={() => { setCurrentView('ward_head'); setSelectedWardDept(null); }} className={`w-full text-left px-5 py-3.5 font-bold border-b border-slate-100 transition-all flex items-center gap-2 hover:pl-6 ${currentView === 'ward_head' ? 'bg-cyan-100 text-teal-800' : 'text-teal-900 hover:bg-cyan-50 hover:text-teal-700'}`}>
                                     เมนูหัวหน้า Ward
                                 </button>
-                                <button onClick={() => { setCurrentView('admin'); setSelectedWardDept(null); }} className={`w-full text-left px-5 py-3.5 font-bold border-b border-slate-100 transition-all flex items-center gap-2 hover:pl-6 ${currentView === 'admin' ? 'bg-cyan-100 text-teal-800' : 'text-teal-900 hover:bg-cyan-50 hover:text-teal-700'}`}>
+                                <button onClick={() => { setCurrentView('admin'); setSelectedWardDept(null); setAdminSection(null); }} className={`w-full text-left px-5 py-3.5 font-bold border-b border-slate-100 transition-all flex items-center gap-2 hover:pl-6 ${currentView === 'admin' ? 'bg-cyan-100 text-teal-800' : 'text-teal-900 hover:bg-cyan-50 hover:text-teal-700'}`}>
                                     เมนู Admin
                                 </button>
                             </div>
@@ -1692,7 +1693,46 @@
                             </div>
 
                             <div className="flex flex-col gap-8">
+                                {/* --- การ์ดเมนู Admin (แสดงเมื่อยังไม่ได้เลือกเมนู) --- */}
+                                {!adminSection && (
+                                    <div className="animate-in fade-in duration-300">
+                                        <div className="mb-6 border-b-2 border-teal-100 pb-4">
+                                            <h2 className="text-2xl font-bold text-teal-800 flex items-center gap-3">
+                                                <UserCircle size={32} className="text-teal-600" />
+                                                เมนูผู้ดูแลระบบ (Admin)
+                                            </h2>
+                                            <p className="text-teal-600 mt-2 font-medium">โปรดเลือกรายการที่ต้องการจัดการ</p>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                                            {[
+                                                { key: 'criteria', title: 'ตารางค่าตัวและเกณฑ์แบ่งกลุ่ม', desc: 'จัดการอัตราค่าตัวและเกณฑ์อ้างอิง', Icon: ClipboardList, color: 'from-blue-700 to-indigo-600', ring: 'hover:border-blue-400', iconBg: 'bg-blue-100 text-blue-600 group-hover:bg-blue-600' },
+                                                { key: 'departments', title: 'ตารางวงเงินกลุ่ม', desc: 'จัดการหน่วยงานและการจัดสรรวงเงิน', Icon: Building2, color: 'from-teal-700 to-teal-600', ring: 'hover:border-teal-400', iconBg: 'bg-teal-100 text-teal-600 group-hover:bg-teal-600' },
+                                                { key: 'personnel', title: 'การจัดการบุคลากร', desc: 'จัดการรายชื่อและข้อมูลบุคลากร', Icon: Users, color: 'from-emerald-700 to-emerald-600', ring: 'hover:border-emerald-400', iconBg: 'bg-emerald-100 text-emerald-600 group-hover:bg-emerald-600' },
+                                            ].map(({ key, title, desc, Icon, color, ring, iconBg }) => (
+                                                <div key={key} onClick={() => setAdminSection(key)} className={`bg-white rounded-2xl shadow-sm p-6 flex flex-col items-center justify-center gap-4 cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all border border-teal-100 ${ring} group`}>
+                                                    <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center group-hover:text-white transition-colors shadow-inner ${iconBg}`}>
+                                                        <Icon size={32} className="md:w-10 md:h-10" />
+                                                    </div>
+                                                    <div className="text-center w-full">
+                                                        <h3 className="text-sm md:text-base font-bold text-teal-900 leading-tight min-h-[2.5rem] flex items-center justify-center">{title}</h3>
+                                                        <p className="text-xs text-slate-500 mt-1 font-medium">{desc}</p>
+                                                    </div>
+                                                    <div className={`mt-1 inline-flex items-center gap-1 text-xs font-bold text-white px-4 py-1.5 rounded-full shadow-sm bg-gradient-to-r ${color}`}>เปิดดู</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* --- ปุ่มย้อนกลับไปหน้าเลือกเมนู Admin --- */}
+                                {adminSection && (
+                                    <button onClick={() => setAdminSection(null)} className="self-start inline-flex items-center gap-2 text-teal-700 hover:text-teal-950 font-bold transition-colors text-sm bg-teal-50 hover:bg-teal-100 px-4 py-2 rounded-xl border border-teal-200 shadow-sm">
+                                        ← ย้อนกลับไปเมนู Admin
+                                    </button>
+                                )}
+
                                 {/* --- Section: ตารางค่าตัวและเกณฑ์แบ่งกลุ่ม --- */}
+                                {adminSection === 'criteria' && (
                                 <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg border border-teal-100 overflow-hidden">
                                     <div className="p-5 bg-gradient-to-r from-blue-700 to-indigo-600 flex justify-between items-center text-white">
                                         <h2 className="text-xl font-bold flex items-center gap-2 drop-shadow-sm">
@@ -1764,7 +1804,10 @@
                                     </div>
                                 </div>
 
+                                )}
+
                                 {/* Top Section: Departments Table */}
+                                {adminSection === 'departments' && (
                                 <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg border border-teal-100 overflow-hidden">
                                     <div className="p-5 bg-gradient-to-r from-teal-700 to-teal-600 flex justify-between items-center text-white">
                                         <h2 className="text-xl font-bold flex items-center gap-2 drop-shadow-sm">
@@ -2001,7 +2044,10 @@
                                     </div>
                                 </div>
 
+                                )}
+
                                 {/* Middle Section: Personnel Management Table */}
+                                {adminSection === 'personnel' && (
                                 <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg border border-teal-100 overflow-hidden">
                                     <div className="p-5 bg-gradient-to-r from-emerald-700 to-emerald-600 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-white">
                                         <h2 className="text-xl font-bold flex items-center gap-2 drop-shadow-sm">
@@ -2168,6 +2214,7 @@
                                         )}
                                     </div>
                                 </div>
+                                )}
                             </div>
                         </>
                     )}
