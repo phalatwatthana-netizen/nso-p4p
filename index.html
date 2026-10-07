@@ -545,7 +545,9 @@
                         if (amt !== null) {
                             const count = countRowIdx !== -1 ? cellNumAt(countRowIdx, h.c) : null;
                             const rate = (count && count > 0) ? amt / count : null; // ค่าตัว/คน
-                            items.push({ name: h.text, amount: amt, count, rate });
+                            // รหัสวิชาชีพ A–I (แถวใต้ชื่อวิชาชีพ)
+                            const codeCell = cells.find(x => x.c === h.c && x.r > headRow && x.r <= headRow + 3 && /^[A-Z]$/.test(x.text));
+                            items.push({ code: codeCell ? codeCell.text : null, name: h.text, amount: amt, count, rate });
                         }
                     });
                     if (items.length) {
@@ -1996,7 +1998,10 @@
                                     </div>
                                     <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                                         {professionBudget.items.map((p, i) => (
-                                            <div key={i} className="rounded-xl border border-teal-100 bg-gradient-to-b from-white to-teal-50/60 p-3 text-center shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+                                            <div key={i} className="relative rounded-xl border border-teal-100 bg-gradient-to-b from-white to-teal-50/60 p-3 text-center shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+                                                {p.code && (
+                                                    <span className="absolute top-1.5 left-1.5 w-5 h-5 flex items-center justify-center rounded-md mop-gradient text-white text-[10px] font-extrabold shadow-sm">{p.code}</span>
+                                                )}
                                                 <p className="text-xs font-bold text-teal-700 truncate" title={p.name}>{p.name}</p>
                                                 <p className="text-base lg:text-lg font-extrabold text-teal-900 mt-1">{p.amount.toLocaleString('th-TH')}</p>
                                                 {p.count != null && (
