@@ -211,6 +211,9 @@
             const [isLoadingBudget, setIsLoadingBudget] = useState(false);
             const [isBudgetDragOver, setIsBudgetDragOver] = useState(false);
             const [isImportingBudget, setIsImportingBudget] = useState(false);
+            const [professionBudget, setProfessionBudget] = useState(null); // { items:[{name,amount}], total }
+            const [gsheetUrl, setGsheetUrl] = useState('');
+            const [isFetchingGsheet, setIsFetchingGsheet] = useState(false);
             const [toastMessage, setToastMessage] = useState('');
 
             // --- ดึงข้อมูล departments ว่างเปล่าไว้ก่อน (ดึงจากชีตเท่านั้น) ---
@@ -510,95 +513,130 @@
                 const n = parseFloat(String(v).replace(/[,\s฿บาท]/gi, ''));
                 return isNaN(n) ? null : n;
             };
+            // ประมวลผลตาราง (2D array) → ดึง 8%/1% (แถวกลุ่มภารกิจการพยาบาล) + วงเงินต่อวิชาชีพ (แถว R77)
+            // คืนค่าข้อความสรุป (string) ถ้าสำเร็จ, คืน null ถ้าไม่พบตัวเลขวงเงินเลย
+            const processBudgetRows = (rows) => {
+                const cells = [];
+                rows.forEach((row, r) => (row || []).forEach((val, c) => {
+                    cells.push({ r, c, text: String(val).trim(), num: toFloat(val) });
+                }));
+                const norm = (s) => String(s).replace(/\s+/g, '');
+                const cellNumAt = (r, c) => { const f = cells.find(x => x.r === r && x.c === c); return f ? f.num : null; };
+                const rowText = {};
+                cells.forEach(x => { rowText[x.r] = (rowText[x.r] || '') + ' ' + x.text; });
+
+                // ----- วงเงินของแต่ละกลุ่มวิชาชีพ (แถว "วงเงินของแต่ละกลุ่มวิชาชีพ...") + ชื่อวิชาชีพจากแถวหัว -----
+                let profRowIdx = -1, headRow = -1;
+                Object.keys(rowText).forEach(r => {
+                    const t = norm(rowText[r]);
+                    if (profRowIdx === -1 && /แต่ละกลุ่มวิชาชีพ/.test(t)) profRowIdx = parseInt(r);
+                    if (headRow === -1 && /RN/.test(t) && /แพทย์/.test(t)) headRow = parseInt(r);
+                });
+                if (profRowIdx !== -1 && headRow !== -1) {
+                    const sumCell = cells.find(x => x.r === headRow && norm(x.text) === 'รวม');
+                    const sumCol = sumCell ? sumCell.c : null;
+                    const items = [];
+                    cells.filter(x => x.r === headRow && x.text && toFloat(x.text) === null).sort((a, b) => a.c - b.c).forEach(h => {
+                        if (sumCol !== null && h.c >= sumCol) return;
+                        const amt = cellNumAt(profRowIdx, h.c);
+                        if (amt !== null) items.push({ name: h.text, amount: amt });
+                    });
+                    if (items.length) {
+                        const total = (sumCol !== null && cellNumAt(profRowIdx, sumCol) !== null) ? cellNumAt(profRowIdx, sumCol) : items.reduce((s, p) => s + p.amount, 0);
+                        setProfessionBudget({ items, total });
+                    }
+                }
+
+                // ----- 8% และ 1% จากแถวกลุ่มภารกิจการพยาบาล (รวม) -----
+                let col70 = -1, colYy = -1;
+                cells.forEach(x => {
+                    const t = norm(x.text);
+                    if (col70 === -1 && (/ผลการปฏิบัติงาน/.test(t) || (/70%/.test(t) && /เดือน/.test(t)))) col70 = x.c;
+                    if (colYy === -1 && (/เยียวยา/.test(t) || (/(^|[^0-9])1%/.test(t) && /เดือน/.test(t) && !/ผลการปฏิบัติงาน/.test(t)))) colYy = x.c;
+                });
+                let targetR = -1;
+                Object.keys(rowText).forEach(r => {
+                    const t = norm(rowText[r]);
+                    if (targetR === -1 && /กลุ่มภารกิจ/.test(t) && /พยาบาล/.test(t) && /รวม/.test(t)) targetR = parseInt(r);
+                });
+                if (targetR !== -1 && (col70 !== -1 || colYy !== -1)) {
+                    const t8 = col70 !== -1 ? cellNumAt(targetR, col70) : null;
+                    const t1 = colYy !== -1 ? cellNumAt(targetR, colYy) : null;
+                    if (t8 !== null || t1 !== null) {
+                        if (t8 !== null) setBudget8Percent(t8.toFixed(2));
+                        if (t1 !== null) setBudget1PercentState(t1.toFixed(2));
+                        return `✅ ดึงข้อมูลแล้ว · 8% ${(t8 || 0).toLocaleString('th-TH')} · 1% ${(t1 || 0).toLocaleString('th-TH')}`;
+                    }
+                }
+
+                // ----- สำรอง: หาแบบป้าย 8%/1% หรือขนาดตัวเลข -----
+                const findNear = (idx) => {
+                    const label = cells[idx];
+                    const sameRowRight = cells.filter(x => x.r === label.r && x.c > label.c && x.num !== null).sort((a, b) => a.c - b.c)[0];
+                    if (sameRowRight) return sameRowRight.num;
+                    const sameColDown = cells.filter(x => x.c === label.c && x.r > label.r && x.num !== null).sort((a, b) => a.r - b.r)[0];
+                    if (sameColDown) return sameColDown.num;
+                    const after = cells.slice(idx + 1).find(x => x.num !== null);
+                    return after ? after.num : null;
+                };
+                const idx8 = cells.findIndex(x => x.num === null && /8\s*%/.test(x.text));
+                const idxExtra = cells.findIndex(x => x.num === null && /1\s*%/.test(x.text) && /(เพิ่ม|extra)/i.test(x.text));
+                const idx1 = cells.findIndex((x, i) => x.num === null && /1\s*%/.test(x.text) && i !== idxExtra && !/(เพิ่ม|extra)/i.test(x.text));
+                let v8 = idx8 !== -1 ? findNear(idx8) : null;
+                let v1 = idx1 !== -1 ? findNear(idx1) : null;
+                let vExtra = idxExtra !== -1 ? findNear(idxExtra) : null;
+                if (v8 === null || v1 === null) {
+                    const nums = cells.map(x => x.num).filter(n => n !== null && n > 0).sort((a, b) => b - a);
+                    if (v8 === null && nums.length) v8 = nums[0];
+                    if (v1 === null && nums.length > 1) v1 = nums[1];
+                }
+                if (v8 === null && v1 === null && vExtra === null) return null;
+                if (v8 !== null) setBudget8Percent(v8.toFixed(2));
+                if (v1 !== null) setBudget1PercentState(v1.toFixed(2));
+                if (vExtra !== null) setBudget1PercentExtraState(vExtra.toFixed(2));
+                return `✅ นำเข้าวงเงินแล้ว${v8 !== null ? ` · 8% ${v8.toLocaleString('th-TH')}` : ''}${v1 !== null ? ` · 1% ${v1.toLocaleString('th-TH')}` : ''}`;
+            };
+
             const importBudgetFromFile = async (file) => {
                 if (!file) return;
-                const okExt = /\.(xlsx|xls|csv|txt)$/i.test(file.name);
-                if (!okExt) { setToastMessage('❌ รองรับเฉพาะไฟล์ Excel (.xlsx/.xls) หรือ CSV'); setTimeout(() => setToastMessage(''), 3000); return; }
+                if (!/\.(xlsx|xls|csv|txt)$/i.test(file.name)) { setToastMessage('❌ รองรับเฉพาะไฟล์ Excel (.xlsx/.xls) หรือ CSV'); setTimeout(() => setToastMessage(''), 3000); return; }
                 if (typeof XLSX === 'undefined') { setToastMessage('❌ โหลดตัวอ่านไฟล์ไม่สำเร็จ (ตรวจอินเทอร์เน็ต)'); setTimeout(() => setToastMessage(''), 3500); return; }
                 setIsImportingBudget(true);
                 try {
                     const buf = await file.arrayBuffer();
                     const wb = XLSX.read(buf, { type: 'array' });
-                    const ws = wb.Sheets[wb.SheetNames[0]];
-                    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' });
-
-                    // แปลงเป็นลิสต์เซลล์เรียงลำดับ (row, col) พร้อมข้อความและตัวเลข
-                    const cells = [];
-                    rows.forEach((row, r) => (row || []).forEach((val, c) => {
-                        cells.push({ r, c, text: String(val).trim(), num: toFloat(val) });
-                    }));
-
-                    const norm = (s) => String(s).replace(/\s+/g, '');
-                    const cellNumAt = (r, c) => { const f = cells.find(x => x.r === r && x.c === c); return f ? f.num : null; };
-
-                    // ===== รูปแบบ "ตารางที่ 2": แถวกลุ่มภารกิจการพยาบาล (รวม) + คอลัมน์เงินผลการปฏิบัติงาน(8%) และ เยียวยา 1%(เดือน) =====
-                    let col70 = -1, colYy = -1;
-                    cells.forEach(x => {
-                        const t = norm(x.text);
-                        // ช่อง 8% = "เงินตามผลการปฏิบัติงาน" (70%) — เผื่อรูปแบบเก่าที่เขียน 70%/เดือน
-                        if (col70 === -1 && (/ผลการปฏิบัติงาน/.test(t) || (/70%/.test(t) && /เดือน/.test(t)))) col70 = x.c;
-                        // ช่อง 1% = "เงินเยียวยา 1%/เดือน"
-                        if (colYy === -1 && (/เยียวยา/.test(t) || (/(^|[^0-9])1%/.test(t) && /เดือน/.test(t) && !/ผลการปฏิบัติงาน/.test(t)))) colYy = x.c;
-                    });
-                    const rowText = {};
-                    cells.forEach(x => { rowText[x.r] = (rowText[x.r] || '') + ' ' + x.text; });
-                    let targetR = -1;
-                    Object.keys(rowText).forEach(r => {
-                        const t = norm(rowText[r]);
-                        if (targetR === -1 && /กลุ่มภารกิจ/.test(t) && /พยาบาล/.test(t) && /รวม/.test(t)) targetR = parseInt(r);
-                    });
-                    if (targetR !== -1 && (col70 !== -1 || colYy !== -1)) {
-                        const t8 = col70 !== -1 ? cellNumAt(targetR, col70) : null;
-                        const t1 = colYy !== -1 ? cellNumAt(targetR, colYy) : null;
-                        if (t8 !== null || t1 !== null) {
-                            if (t8 !== null) setBudget8Percent(t8.toFixed(2));
-                            if (t1 !== null) setBudget1PercentState(t1.toFixed(2));
-                            setToastMessage(`✅ ดึงจากแถวกลุ่มภารกิจการพยาบาล · 8% ${(t8 || 0).toLocaleString('th-TH')} · 1% ${(t1 || 0).toLocaleString('th-TH')}`);
-                            setTimeout(() => setToastMessage(''), 4000);
-                            return;
-                        }
-                    }
-
-                    // หาเลขที่อยู่ "ใกล้" ป้ายกำกับมากที่สุด (ขวาในแถวเดียวกัน → ล่างในคอลัมน์เดียวกัน → ถัดไป)
-                    const findNear = (idx) => {
-                        const label = cells[idx];
-                        const sameRowRight = cells.filter(x => x.r === label.r && x.c > label.c && x.num !== null).sort((a, b) => a.c - b.c)[0];
-                        if (sameRowRight) return sameRowRight.num;
-                        const sameColDown = cells.filter(x => x.c === label.c && x.r > label.r && x.num !== null).sort((a, b) => a.r - b.r)[0];
-                        if (sameColDown) return sameColDown.num;
-                        const after = cells.slice(idx + 1).find(x => x.num !== null);
-                        return after ? after.num : null;
-                    };
-
-                    const idx8 = cells.findIndex(x => x.num === null && /8\s*%/.test(x.text));
-                    const idxExtra = cells.findIndex(x => x.num === null && /1\s*%/.test(x.text) && /(เพิ่ม|extra)/i.test(x.text));
-                    const idx1 = cells.findIndex((x, i) => x.num === null && /1\s*%/.test(x.text) && i !== idxExtra && !/(เพิ่ม|extra)/i.test(x.text));
-
-                    let v8 = idx8 !== -1 ? findNear(idx8) : null;
-                    let v1 = idx1 !== -1 ? findNear(idx1) : null;
-                    let vExtra = idxExtra !== -1 ? findNear(idxExtra) : null;
-
-                    // สำรอง: ถ้าหาจากป้ายไม่ได้ ใช้ขนาดตัวเลข (มากสุด = 8%, รองลงมา = 1%)
-                    if (v8 === null || v1 === null) {
-                        const nums = cells.map(x => x.num).filter(n => n !== null && n > 0).sort((a, b) => b - a);
-                        if (v8 === null && nums.length) v8 = nums[0];
-                        if (v1 === null && nums.length > 1) v1 = nums[1];
-                    }
-
-                    if (v8 === null && v1 === null && vExtra === null) {
-                        setToastMessage('❌ ไม่พบตัวเลขวงเงินในไฟล์'); setTimeout(() => setToastMessage(''), 3000); return;
-                    }
-                    if (v8 !== null) setBudget8Percent(v8.toFixed(2));
-                    if (v1 !== null) setBudget1PercentState(v1.toFixed(2));
-                    if (vExtra !== null) setBudget1PercentExtraState(vExtra.toFixed(2));
-                    setToastMessage(`✅ นำเข้าวงเงินแล้ว${v8 !== null ? ` · 8% ${v8.toLocaleString('th-TH')}` : ''}${v1 !== null ? ` · 1% ${v1.toLocaleString('th-TH')}` : ''}`);
-                    setTimeout(() => setToastMessage(''), 3500);
+                    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false, defval: '' });
+                    const msg = processBudgetRows(rows);
+                    setToastMessage(msg || '❌ ไม่พบตัวเลขวงเงินในไฟล์'); setTimeout(() => setToastMessage(''), 4000);
                 } catch (err) {
                     console.error(err);
                     setToastMessage('❌ อ่านไฟล์ไม่สำเร็จ'); setTimeout(() => setToastMessage(''), 3000);
                 } finally {
-                    setIsImportingBudget(false);
-                    setIsBudgetDragOver(false);
+                    setIsImportingBudget(false); setIsBudgetDragOver(false);
+                }
+            };
+
+            const importBudgetFromGoogleSheet = async () => {
+                const url = gsheetUrl.trim();
+                if (!url) { setToastMessage('❌ วางลิงก์ Google Sheet ก่อน'); setTimeout(() => setToastMessage(''), 3000); return; }
+                if (typeof XLSX === 'undefined') { setToastMessage('❌ โหลดตัวอ่านไฟล์ไม่สำเร็จ (ตรวจอินเทอร์เน็ต)'); setTimeout(() => setToastMessage(''), 3500); return; }
+                const idM = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                if (!idM) { setToastMessage('❌ ลิงก์ไม่ถูกต้อง (ต้องเป็นลิงก์ Google Sheets)'); setTimeout(() => setToastMessage(''), 3500); return; }
+                const gidM = url.match(/[#&?]gid=([0-9]+)/);
+                const csvUrl = `https://docs.google.com/spreadsheets/d/${idM[1]}/gviz/tq?tqx=out:csv${gidM ? `&gid=${gidM[1]}` : ''}&_=${Date.now()}`;
+                setIsFetchingGsheet(true);
+                try {
+                    const res = await fetch(csvUrl);
+                    if (!res.ok) throw new Error('network');
+                    const wb = XLSX.read(await res.text(), { type: 'string' });
+                    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false, defval: '' });
+                    const msg = processBudgetRows(rows);
+                    setToastMessage(msg || '❌ ไม่พบตารางวงเงินในชีต (ตรวจแท็บ/การแชร์)'); setTimeout(() => setToastMessage(''), 4500);
+                } catch (err) {
+                    console.error(err);
+                    setToastMessage('❌ ดึง Google Sheet ไม่สำเร็จ (ตั้งค่าแชร์ "ทุกคนที่มีลิงก์")'); setTimeout(() => setToastMessage(''), 4500);
+                } finally {
+                    setIsFetchingGsheet(false);
                 }
             };
 
@@ -1909,6 +1947,16 @@
                                         <input type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden"
                                             onChange={(e) => { if (e.target.files && e.target.files[0]) importBudgetFromFile(e.target.files[0]); e.target.value = ''; }} />
                                     </label>
+                                    {/* ดึงจาก Google Sheet */}
+                                    <div className="flex items-center gap-1.5">
+                                        <input type="text" value={gsheetUrl} onChange={(e) => setGsheetUrl(e.target.value)}
+                                            placeholder="วางลิงก์ Google Sheet (เปิดแท็บตารางที่ 2 แล้วคัดลอก URL)"
+                                            className="flex-1 min-w-0 bg-teal-900/40 border border-teal-500/50 rounded-lg px-2.5 py-1.5 text-[11px] text-white placeholder-teal-200/60 outline-none focus:ring-2 focus:ring-emerald-400/60" />
+                                        <button onClick={importBudgetFromGoogleSheet} disabled={isFetchingGsheet}
+                                            className="shrink-0 flex items-center gap-1 bg-emerald-500 hover:bg-emerald-400 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all shadow-sm disabled:opacity-50">
+                                            {isFetchingGsheet ? <RefreshCw size={13} className="animate-spin" /> : <RefreshCw size={13} />} ดึง
+                                        </button>
+                                    </div>
                                     <div className="flex justify-between items-end border-t border-teal-500/50 pt-3 mt-auto w-full">
                                         <div><span className="text-xs font-medium text-teal-100 block mb-0.5">รวมทั้งสิ้น</span><p className="text-lg lg:text-xl font-bold drop-shadow-sm">{formatCurrency(totalGroupBudget)}</p></div>
                                         <button onClick={handleSaveToSheet} disabled={isSaving} className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
@@ -1925,6 +1973,34 @@
                                     <div className="text-white"><p className="text-white/80 font-medium mb-1">เงินกองกลางคงเหลือ</p><p className="text-2xl lg:text-3xl font-bold drop-shadow-sm">{formatCurrency(remainingBudget)}</p></div>
                                 </div>
                             </div>
+
+                            {/* --- วงเงินของแต่ละกลุ่มวิชาชีพ (ดึงจากไฟล์/Google Sheet) --- */}
+                            {professionBudget && professionBudget.items.length > 0 && (
+                                <div className="mb-8 mop-card overflow-hidden animate-in fade-in duration-300">
+                                    <div className="mop-gradient text-white px-5 py-4 flex items-center justify-between gap-3">
+                                        <h2 className="text-base lg:text-lg font-bold flex items-center gap-2 drop-shadow-sm">
+                                            <ClipboardList size={20} className="text-white/90" />
+                                            วงเงินของแต่ละกลุ่มวิชาชีพ ใน 1 เดือน (8.75%)
+                                        </h2>
+                                        <button onClick={() => setProfessionBudget(null)} className="shrink-0 text-white/80 hover:text-white bg-white/15 hover:bg-white/25 rounded-lg p-1.5 transition-colors" title="ซ่อน">
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                    <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                                        {professionBudget.items.map((p, i) => (
+                                            <div key={i} className="rounded-xl border border-teal-100 bg-gradient-to-b from-white to-teal-50/60 p-3 text-center shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+                                                <p className="text-xs font-bold text-teal-700 truncate" title={p.name}>{p.name}</p>
+                                                <p className="text-base lg:text-lg font-extrabold text-teal-900 mt-1">{p.amount.toLocaleString('th-TH')}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="px-5 py-3 border-t border-teal-100 bg-teal-50/60 flex justify-end items-baseline gap-2">
+                                        <span className="text-sm font-bold text-teal-700">รวมทั้งสิ้น</span>
+                                        <span className="text-xl lg:text-2xl font-extrabold mop-text-gradient">{professionBudget.total.toLocaleString('th-TH')}</span>
+                                        <span className="text-xs text-slate-400">บาท/เดือน</span>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="flex flex-col gap-8">
                                 {/* --- การ์ดเมนู Admin (แสดงเมื่อยังไม่ได้เลือกเมนู) --- */}
