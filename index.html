@@ -7,7 +7,50 @@
     
     <!-- นำเข้า Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+    <!-- ตั้งค่าธีมสีแบรนด์ MOP (ฟ้าผสมเขียว) — remap ชุดสีเดิมให้เป็นพาเลทใหม่ -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Anuphan', 'Noto Sans Thai', 'sans-serif'],
+                    },
+                    colors: {
+                        // ฟ้า (ฟ้าเข้ม #1E88E5 / ฟ้าหลัก #42A5F5 / ฟ้าอ่อน #64B5F6)
+                        blue: {
+                            50:'#E7F2FD',100:'#C9E3FB',200:'#9CCCF8',300:'#64B5F6',400:'#42A5F5',
+                            500:'#1E88E5',600:'#1976D2',700:'#1565C0',800:'#0D47A1',900:'#0A3880',
+                        },
+                        // ฟ้าอมเขียว (#26C6DA)
+                        cyan: {
+                            50:'#E3F8FB',100:'#BDEEF4',200:'#8CE1EC',300:'#4DD3E2',400:'#26C6DA',
+                            500:'#16B2C7',600:'#0E95A8',700:'#0B7888',800:'#0A6170',900:'#084E5A',
+                        },
+                        // สีหลักของระบบ — เขียวอมฟ้า/เขียวเข้ม (#00BFA5 / #00897B)
+                        teal: {
+                            50:'#E6F6F3',100:'#C5EBE4',200:'#8FD9CC',300:'#55C5B2',400:'#1EBBA0',
+                            500:'#00BFA5',600:'#00897B',700:'#00766A',800:'#006358',900:'#004F47',
+                        },
+                        // เขียวอมฟ้า → เขียวอ่อน (#00BFA5 / #80E0B5)
+                        emerald: {
+                            50:'#E7F8F1',100:'#C3EFDD',200:'#9BE6C6',300:'#80E0B5',400:'#34D9A3',
+                            500:'#00BFA5',600:'#00A98F',700:'#009079',800:'#007A68',900:'#006B5C',
+                        },
+                        // เขียวสด/เขียวธรรมชาติ (#43A047 / #8BC34A)
+                        green: {
+                            50:'#EEF8EA',100:'#D4EDC9',200:'#B6E09E',300:'#8BC34A',400:'#66BB4C',
+                            500:'#43A047',600:'#388E3C',700:'#2E7D32',800:'#276A2B',900:'#1B5E20',
+                        },
+                    },
+                    boxShadow: {
+                        'premium': '0 10px 30px -8px rgba(0,137,123,0.25), 0 4px 12px -6px rgba(30,136,229,0.2)',
+                        'premium-lg': '0 20px 45px -12px rgba(0,137,123,0.35), 0 8px 20px -8px rgba(30,136,229,0.25)',
+                    },
+                },
+            },
+        };
+    </script>
+
     <!-- นำเข้า React และ ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -18,38 +61,88 @@
     <!-- นำเข้า Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <!-- ตั้งค่าฟอนต์ภาษาไทย TH Sarabun New และ Google Font Sarabun สำรอง -->
+    <!-- ฟอนต์ไทยไม่มีหัว ทันสมัย: Anuphan (หลัก) + Noto Sans Thai (สำรอง) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        @font-face {
-            font-family: 'TH Sarabun New';
-            src: local('TH Sarabun New'), local('THSarabunNew');
+        :root {
+            /* พาเลทสีแบรนด์ MOP (ฟ้าผสมเขียว) */
+            --mop-blue-dark:#1E88E5; --mop-blue:#42A5F5; --mop-blue-light:#64B5F6;
+            --mop-cyan:#26C6DA; --mop-teal:#00BFA5; --mop-green-light:#80E0B5;
+            --mop-green-dark:#00897B; --mop-green:#43A047; --mop-nature:#8BC34A;
+            --mop-sky-soft:#CFE8F3; --mop-gray-soft:#E6EEF2;
         }
-        body { 
-            /* กำหนดให้ใช้ TH Sarabun New เป็นหลัก ถ้าไม่มีให้ใช้ Sarabun จาก Google */
-            font-family: 'TH Sarabun New', 'Sarabun', sans-serif; 
-            font-size: 16px; /* ปรับขนาดพื้นฐานให้อ่านง่ายสำหรับสารบัญ */
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Anuphan', 'Noto Sans Thai', sans-serif;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background:
+                radial-gradient(1200px 600px at 100% -10%, rgba(38,198,218,0.12), transparent 60%),
+                radial-gradient(1000px 500px at -10% 110%, rgba(0,137,123,0.10), transparent 55%),
+                #F3F8FB;
         }
-        
-        /* ปรับขนาดตัวอักษรบางจุดให้ใหญ่ขึ้นเพื่อชดเชยขนาดของฟอนต์สารบัญ */
-        .text-xs { font-size: 0.85rem; line-height: 1.1rem; }
-        .text-sm { font-size: 0.95rem; line-height: 1.3rem; }
-        .text-base { font-size: 1.1rem; line-height: 1.6rem; }
-        .text-lg { font-size: 1.25rem; line-height: 1.75rem; }
-        .text-xl { font-size: 1.4rem; line-height: 1.8rem; }
-        .text-2xl { font-size: 1.7rem; line-height: 2rem; }
-        .text-3xl { font-size: 2rem; line-height: 2.25rem; }
+
+        /* ขนาดตัวอักษรให้เหมาะกับฟอนต์ไม่มีหัว (อ่านง่าย คมชัด) */
+        .text-xs  { font-size: 0.78rem;  line-height: 1.05rem; }
+        .text-sm  { font-size: 0.875rem; line-height: 1.3rem;  }
+        .text-base{ font-size: 1rem;     line-height: 1.55rem; }
+        .text-lg  { font-size: 1.125rem; line-height: 1.7rem;  }
+        .text-xl  { font-size: 1.3rem;   line-height: 1.8rem;  }
+        .text-2xl { font-size: 1.6rem;   line-height: 2rem;    }
+        .text-3xl { font-size: 1.95rem;  line-height: 2.25rem; }
+        h1,h2,h3 { letter-spacing: -0.01em; }
+
+        /* ===== ยูทิลิตีไล่เฉดพรีเมียมแบรนด์ MOP ===== */
+        .mop-gradient { background: linear-gradient(120deg, #1E88E5 0%, #26C6DA 45%, #00BFA5 75%, #80E0B5 100%); }
+        .mop-gradient-soft { background: linear-gradient(120deg, #E7F2FD 0%, #E3F8FB 50%, #E7F8F1 100%); }
+        .mop-text-gradient {
+            background: linear-gradient(100deg, #1E88E5, #00BFA5 70%, #43A047);
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent; color: transparent;
+        }
+        /* เส้นขอบไล่เฉด (gradient border) สำหรับการ์ดพรีเมียม */
+        .mop-card {
+            position: relative; background: #ffffff; border-radius: 1.25rem;
+            box-shadow: 0 10px 30px -10px rgba(0,137,123,0.18), 0 4px 10px -6px rgba(30,136,229,0.14);
+            transition: transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s ease;
+        }
+        .mop-card::before {
+            content:""; position:absolute; inset:0; border-radius:inherit; padding:1.5px;
+            background: linear-gradient(135deg, rgba(30,136,229,.55), rgba(38,198,218,.45), rgba(0,191,165,.55));
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude; pointer-events:none;
+        }
+        .mop-card:hover { transform: translateY(-6px); box-shadow: 0 24px 50px -16px rgba(0,137,123,0.35), 0 10px 24px -10px rgba(30,136,229,0.28); }
+        .mop-card:hover .mop-card-ico { transform: scale(1.06) rotate(-3deg); }
+        .mop-card-ico { transition: transform .35s cubic-bezier(.2,.8,.2,1); }
+
+        /* แสงวาวบนปุ่ม/การ์ด (shine sweep) */
+        .mop-shine { position: relative; overflow: hidden; }
+        .mop-shine::after {
+            content:""; position:absolute; top:0; left:-120%; width:60%; height:100%;
+            background: linear-gradient(120deg, transparent, rgba(255,255,255,.35), transparent);
+            transform: skewX(-20deg); transition: left .6s ease;
+        }
+        .mop-shine:hover::after { left:140%; }
+
+        /* ปุ่มเมนูนำทางด้านซ้าย (sidebar nav) */
+        .nav-item { transition: all .25s ease; border-radius: .9rem; }
+        .nav-item:hover { transform: translateX(3px); }
 
         /* ซ่อน Scrollbar แต่ยังเลื่อนได้ */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar { width: 7px; height: 7px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        ::-webkit-scrollbar-thumb { background: linear-gradient(#26C6DA,#00897B); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: linear-gradient(#1E88E5,#00766A); }
+
+        .animate-float { animation: mopfloat 6s ease-in-out infinite; }
+        @keyframes mopfloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800">
+<body class="text-slate-800">
     
     <div id="root"></div>
 
@@ -960,7 +1053,7 @@
             };
 
             return (
-                <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-teal-50 to-emerald-100 font-sans text-teal-900 p-4 md:p-8 relative">
+                <div className="min-h-screen font-sans text-teal-900 p-3 sm:p-4 md:p-6 lg:p-8 relative">
                     
                     {/* Global Datalists สำหรับ Combobox ทุกจุด (พิมพ์ได้ เลือกได้) */}
                     <datalist id="month-list">
@@ -1001,33 +1094,53 @@
                         </div>
                     )}
 
-                    <header className="mb-8 bg-gradient-to-r from-teal-800 to-cyan-700 text-white p-6 md:p-8 rounded-2xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4 border-b-4 border-emerald-400 z-40 relative">
-                        <div>
-                            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3">
-                                <Building2 className="text-cyan-200 h-8 w-8 md:h-10 md:w-10 animate-pulse" />
+                    {/* ================== เลย์เอาต์: เมนูบาร์ด้านซ้าย + เนื้อหา ================== */}
+                    <div className="flex flex-col lg:flex-row gap-5 lg:gap-6 items-stretch lg:items-start">
+
+                        {/* ---------- เมนูบาร์ด้านซ้าย (Sidebar) ---------- */}
+                        <aside className="w-full lg:w-64 xl:w-72 shrink-0 lg:sticky lg:top-6 z-40">
+                            <div className="mop-card p-3 lg:p-4 flex lg:flex-col gap-2">
+                                <div className="hidden lg:flex items-center gap-3 px-2 pb-3 mb-1 border-b border-teal-100/70">
+                                    <div className="w-11 h-11 rounded-2xl mop-gradient flex items-center justify-center text-white shadow-premium animate-float">
+                                        <Building2 size={22} />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold mop-text-gradient leading-tight">MOP</p>
+                                        <p className="text-[11px] text-slate-400 font-medium">เมนูการใช้งาน</p>
+                                    </div>
+                                </div>
+                                {[
+                                    { key: 'admin', label: 'เมนู Admin', Icon: UserCircle },
+                                    { key: 'ward_head', label: 'เมนูหัวหน้า Ward', Icon: Users },
+                                ].map(({ key, label, Icon }) => {
+                                    const active = currentView === key;
+                                    return (
+                                        <button key={key} onClick={() => { setCurrentView(key); setSelectedWardDept(null); if (key === 'admin') setAdminSection(null); }}
+                                            className={`nav-item mop-shine flex-1 lg:flex-none flex items-center justify-center lg:justify-start gap-3 px-3 lg:px-4 py-3 font-bold text-sm ${active ? 'mop-gradient text-white shadow-premium' : 'text-teal-800 hover:bg-teal-50'}`}>
+                                            <Icon size={20} className={active ? 'text-white shrink-0' : 'text-teal-500 shrink-0'} />
+                                            <span className="truncate">{label}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </aside>
+
+                        {/* ---------- คอลัมน์เนื้อหาหลัก ---------- */}
+                        <div className="flex-1 min-w-0">
+                    <header className="mb-6 mop-gradient text-white p-6 md:p-7 rounded-3xl shadow-premium-lg flex items-center justify-between gap-4 relative overflow-hidden">
+                        <div className="absolute -right-12 -top-12 w-52 h-52 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                        <div className="absolute right-24 -bottom-16 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                        <div className="relative">
+                            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3 drop-shadow-sm">
+                                <span className="w-11 h-11 md:w-12 md:h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm shadow-inner shrink-0 animate-float">
+                                    <Building2 className="h-6 w-6 md:h-7 md:w-7 text-white" />
+                                </span>
                                 ระบบจัดสรรค่าตอบแทน กลุ่มการพยาบาล
                             </h1>
-                            <p className="text-teal-100 mt-2 text-md md:text-lg font-medium tracking-wide">โรงพยาบาลศรีสังวรสุโขทัย</p>
+                            <p className="text-white/85 mt-2 text-sm md:text-base font-medium tracking-wide pl-1">โรงพยาบาลศรีสังวรสุโขทัย</p>
                         </div>
-
-                        <div className="relative group">
-                            <button className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 px-5 py-2.5 rounded-xl transition-all backdrop-blur-sm shadow-sm">
-                                <UserCircle size={22} className="text-cyan-200" />
-                                <span className="font-bold text-sm tracking-wide">เลือกเมนูการใช้งาน</span>
-                                <ChevronDown size={18} className="text-teal-200 group-hover:rotate-180 transition-transform duration-300" />
-                            </button>
-                            
-                            <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-2xl border border-teal-100 overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 transform origin-top-right group-hover:translate-y-0 translate-y-2 z-50">
-                                <div className="p-3 bg-teal-50 border-b border-teal-100">
-                                    <p className="text-xs font-bold text-teal-800 uppercase tracking-wider text-center">สิทธิ์การเข้าถึง</p>
-                                </div>
-                                <button onClick={() => { setCurrentView('ward_head'); setSelectedWardDept(null); }} className={`w-full text-left px-5 py-3.5 font-bold border-b border-slate-100 transition-all flex items-center gap-2 hover:pl-6 ${currentView === 'ward_head' ? 'bg-cyan-100 text-teal-800' : 'text-teal-900 hover:bg-cyan-50 hover:text-teal-700'}`}>
-                                    เมนูหัวหน้า Ward
-                                </button>
-                                <button onClick={() => { setCurrentView('admin'); setSelectedWardDept(null); setAdminSection(null); }} className={`w-full text-left px-5 py-3.5 font-bold border-b border-slate-100 transition-all flex items-center gap-2 hover:pl-6 ${currentView === 'admin' ? 'bg-cyan-100 text-teal-800' : 'text-teal-900 hover:bg-cyan-50 hover:text-teal-700'}`}>
-                                    เมนู Admin
-                                </button>
-                            </div>
+                        <div className="relative hidden sm:flex w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-sm items-center justify-center text-white shadow-inner shrink-0">
+                            <Star size={22} className="text-white" />
                         </div>
                     </header>
 
@@ -1048,9 +1161,9 @@
                                         </div>
                                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
                                             {departments.map((dept) => (
-                                                <div key={dept.name} onClick={() => setSelectedWardDept(dept)} className="bg-gradient-to-b from-white to-teal-50 rounded-2xl shadow-sm p-6 flex flex-col items-center justify-center gap-4 cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:border-teal-400 transition-all border border-teal-100 group">
-                                                    <div className="w-16 h-16 md:w-20 md:h-20 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center group-hover:bg-teal-600 group-hover:text-white transition-colors shadow-inner">
-                                                        <Building2 size={32} className="md:w-10 md:h-10" />
+                                                <div key={dept.name} onClick={() => setSelectedWardDept(dept)} className="mop-card group cursor-pointer p-6 flex flex-col items-center justify-center gap-4">
+                                                    <div className="mop-card-ico w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-white shadow-premium" style={{ background: 'linear-gradient(135deg,#00897B,#00BFA5,#80E0B5)' }}>
+                                                        <Building2 size={32} className="md:w-10 md:h-10 drop-shadow" />
                                                     </div>
                                                     <div className="text-center w-full">
                                                         <h3 className="text-sm md:text-base font-bold text-teal-900 line-clamp-2 leading-tight min-h-[2.5rem] flex items-center justify-center">{dept.name}</h3>
@@ -1705,19 +1818,21 @@
                                         </div>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                                             {[
-                                                { key: 'criteria', title: 'ตารางค่าตัวและเกณฑ์แบ่งกลุ่ม', desc: 'จัดการอัตราค่าตัวและเกณฑ์อ้างอิง', Icon: ClipboardList, color: 'from-blue-700 to-indigo-600', ring: 'hover:border-blue-400', iconBg: 'bg-blue-100 text-blue-600 group-hover:bg-blue-600' },
-                                                { key: 'departments', title: 'ตารางวงเงินกลุ่ม', desc: 'จัดการหน่วยงานและการจัดสรรวงเงิน', Icon: Building2, color: 'from-teal-700 to-teal-600', ring: 'hover:border-teal-400', iconBg: 'bg-teal-100 text-teal-600 group-hover:bg-teal-600' },
-                                                { key: 'personnel', title: 'การจัดการบุคลากร', desc: 'จัดการรายชื่อและข้อมูลบุคลากร', Icon: Users, color: 'from-emerald-700 to-emerald-600', ring: 'hover:border-emerald-400', iconBg: 'bg-emerald-100 text-emerald-600 group-hover:bg-emerald-600' },
-                                            ].map(({ key, title, desc, Icon, color, ring, iconBg }) => (
-                                                <div key={key} onClick={() => setAdminSection(key)} className={`bg-white rounded-2xl shadow-sm p-6 flex flex-col items-center justify-center gap-4 cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all border border-teal-100 ${ring} group`}>
-                                                    <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center group-hover:text-white transition-colors shadow-inner ${iconBg}`}>
-                                                        <Icon size={32} className="md:w-10 md:h-10" />
+                                                { key: 'criteria', title: 'ตารางค่าตัวและเกณฑ์แบ่งกลุ่ม', desc: 'จัดการอัตราค่าตัวและเกณฑ์อ้างอิง', Icon: ClipboardList, grad: 'linear-gradient(135deg,#1E88E5,#42A5F5,#64B5F6)' },
+                                                { key: 'departments', title: 'ตารางวงเงินกลุ่ม', desc: 'จัดการหน่วยงานและการจัดสรรวงเงิน', Icon: Building2, grad: 'linear-gradient(135deg,#00897B,#00BFA5,#26C6DA)' },
+                                                { key: 'personnel', title: 'การจัดการบุคลากร', desc: 'จัดการรายชื่อและข้อมูลบุคลากร', Icon: Users, grad: 'linear-gradient(135deg,#43A047,#66BB4C,#8BC34A)' },
+                                            ].map(({ key, title, desc, Icon, grad }) => (
+                                                <div key={key} onClick={() => setAdminSection(key)} className="mop-card group cursor-pointer p-6 flex flex-col items-center justify-center gap-4 text-center">
+                                                    <div className="mop-card-ico w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-white shadow-premium" style={{ background: grad }}>
+                                                        <Icon size={34} className="md:w-10 md:h-10 drop-shadow" />
                                                     </div>
-                                                    <div className="text-center w-full">
+                                                    <div className="w-full">
                                                         <h3 className="text-sm md:text-base font-bold text-teal-900 leading-tight min-h-[2.5rem] flex items-center justify-center">{title}</h3>
                                                         <p className="text-xs text-slate-500 mt-1 font-medium">{desc}</p>
                                                     </div>
-                                                    <div className={`mt-1 inline-flex items-center gap-1 text-xs font-bold text-white px-4 py-1.5 rounded-full shadow-sm bg-gradient-to-r ${color}`}>เปิดดู</div>
+                                                    <div className="mop-shine mt-1 inline-flex items-center gap-1.5 text-xs font-bold text-white px-5 py-2 rounded-full shadow-premium" style={{ background: grad }}>
+                                                        เปิดดู <ChevronDown size={14} className="-rotate-90" />
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
@@ -2218,6 +2333,8 @@
                             </div>
                         </>
                     )}
+                        </div>{/* ปิดคอลัมน์เนื้อหาหลัก */}
+                    </div>{/* ปิดเลย์เอาต์ sidebar + content */}
 
                     {/* --- Transaction Modal --- */}
                     {isModalOpen && (
