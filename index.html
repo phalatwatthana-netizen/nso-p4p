@@ -528,6 +528,35 @@
                         cells.push({ r, c, text: String(val).trim(), num: toFloat(val) });
                     }));
 
+                    const norm = (s) => String(s).replace(/\s+/g, '');
+                    const cellNumAt = (r, c) => { const f = cells.find(x => x.r === r && x.c === c); return f ? f.num : null; };
+
+                    // ===== รูปแบบ "ตารางที่ 2": แถวกลุ่มภารกิจการพยาบาล (รวม) + คอลัมน์ 70%/เดือน และ 1%/เดือน =====
+                    let col70 = -1, colYy = -1;
+                    cells.forEach(x => {
+                        const t = norm(x.text);
+                        if (col70 === -1 && /70%/.test(t) && /เดือน/.test(t)) col70 = x.c;
+                        if (colYy === -1 && /เดือน/.test(t) && !/70%/.test(t) && (/เยียวยา/.test(t) || /(^|[^0-9])1%/.test(t))) colYy = x.c;
+                    });
+                    const rowText = {};
+                    cells.forEach(x => { rowText[x.r] = (rowText[x.r] || '') + ' ' + x.text; });
+                    let targetR = -1;
+                    Object.keys(rowText).forEach(r => {
+                        const t = norm(rowText[r]);
+                        if (targetR === -1 && /กลุ่มภารกิจ/.test(t) && /พยาบาล/.test(t) && /รวม/.test(t)) targetR = parseInt(r);
+                    });
+                    if (targetR !== -1 && (col70 !== -1 || colYy !== -1)) {
+                        const t8 = col70 !== -1 ? cellNumAt(targetR, col70) : null;
+                        const t1 = colYy !== -1 ? cellNumAt(targetR, colYy) : null;
+                        if (t8 !== null || t1 !== null) {
+                            if (t8 !== null) setBudget8Percent(t8.toFixed(2));
+                            if (t1 !== null) setBudget1PercentState(t1.toFixed(2));
+                            setToastMessage(`✅ ดึงจากแถวกลุ่มภารกิจการพยาบาล · 8% ${(t8 || 0).toLocaleString('th-TH')} · 1% ${(t1 || 0).toLocaleString('th-TH')}`);
+                            setTimeout(() => setToastMessage(''), 4000);
+                            return;
+                        }
+                    }
+
                     // หาเลขที่อยู่ "ใกล้" ป้ายกำกับมากที่สุด (ขวาในแถวเดียวกัน → ล่างในคอลัมน์เดียวกัน → ถัดไป)
                     const findNear = (idx) => {
                         const label = cells[idx];
