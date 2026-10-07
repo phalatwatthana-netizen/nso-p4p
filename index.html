@@ -203,15 +203,16 @@
                 return months[new Date().getMonth()];
             });
             
-            const [budget8Percent, setBudget8Percent] = useState('2529111.00'); 
-            const [budget1PercentState, setBudget1PercentState] = useState('0.00'); 
-            const [budget1PercentExtraState, setBudget1PercentExtraState] = useState('0.00'); 
+            const importedBudgetInit = (() => { try { return JSON.parse(localStorage.getItem('nursingApp_importedBudget') || 'null'); } catch (e) { return null; } })();
+            const [budget8Percent, setBudget8Percent] = useState(importedBudgetInit && importedBudgetInit.b8 != null ? String(importedBudgetInit.b8) : '2529111.00');
+            const [budget1PercentState, setBudget1PercentState] = useState(importedBudgetInit && importedBudgetInit.b1 != null ? String(importedBudgetInit.b1) : '0.00');
+            const [budget1PercentExtraState, setBudget1PercentExtraState] = useState(importedBudgetInit && importedBudgetInit.bx != null ? String(importedBudgetInit.bx) : '0.00');
 
             const [isSaving, setIsSaving] = useState(false);
             const [isLoadingBudget, setIsLoadingBudget] = useState(false);
             const [isBudgetDragOver, setIsBudgetDragOver] = useState(false);
             const [isImportingBudget, setIsImportingBudget] = useState(false);
-            const [professionBudget, setProfessionBudget] = useState(null); // { items:[{name,amount}], total }
+            const [professionBudget, setProfessionBudget] = useState(() => { try { return JSON.parse(localStorage.getItem('nursingApp_professionBudget') || 'null'); } catch (e) { return null; } }); // { items:[{code,name,amount,count,rate}], total, totalCount }
             const [gsheetUrl, setGsheetUrl] = useState('');
             const [isFetchingGsheet, setIsFetchingGsheet] = useState(false);
             const [toastMessage, setToastMessage] = useState('');
@@ -384,6 +385,7 @@
             useEffect(() => { localStorage.setItem('nursingApp_staffDeptOverrides', JSON.stringify(staffDeptOverrides)); }, [staffDeptOverrides]);
             useEffect(() => { localStorage.setItem('nursingApp_customDepartments', JSON.stringify(customDepartments)); }, [customDepartments]);
             useEffect(() => { localStorage.setItem('nursingApp_deletedDepartments', JSON.stringify(deletedDepartments)); }, [deletedDepartments]);
+            useEffect(() => { try { if (professionBudget) localStorage.setItem('nursingApp_professionBudget', JSON.stringify(professionBudget)); else localStorage.removeItem('nursingApp_professionBudget'); } catch (e) {} }, [professionBudget]);
 
             useEffect(() => {
                 const autoDetectLatestMonthAndBudget = async () => {
@@ -575,7 +577,7 @@
                     if (t8 !== null || t1 !== null) {
                         if (t8 !== null) setBudget8Percent(t8.toFixed(2));
                         if (t1 !== null) setBudget1PercentState(t1.toFixed(2));
-                        return `✅ ดึงข้อมูลแล้ว · 8% ${(t8 || 0).toLocaleString('th-TH')} · 1% ${(t1 || 0).toLocaleString('th-TH')}`;
+                        return { msg: `✅ ดึงข้อมูลแล้ว · 8% ${(t8 || 0).toLocaleString('th-TH')} · 1% ${(t1 || 0).toLocaleString('th-TH')}`, b8: t8, b1: t1 };
                     }
                 }
 
@@ -604,7 +606,7 @@
                 if (v8 !== null) setBudget8Percent(v8.toFixed(2));
                 if (v1 !== null) setBudget1PercentState(v1.toFixed(2));
                 if (vExtra !== null) setBudget1PercentExtraState(vExtra.toFixed(2));
-                return `✅ นำเข้าวงเงินแล้ว${v8 !== null ? ` · 8% ${v8.toLocaleString('th-TH')}` : ''}${v1 !== null ? ` · 1% ${v1.toLocaleString('th-TH')}` : ''}`;
+                return { msg: `✅ นำเข้าวงเงินแล้ว${v8 !== null ? ` · 8% ${v8.toLocaleString('th-TH')}` : ''}${v1 !== null ? ` · 1% ${v1.toLocaleString('th-TH')}` : ''}`, b8: v8, b1: v1, bx: vExtra };
             };
 
             const importBudgetFromFile = async (file) => {
@@ -616,8 +618,10 @@
                     const buf = await file.arrayBuffer();
                     const wb = XLSX.read(buf, { type: 'array' });
                     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false, defval: '' });
-                    const msg = processBudgetRows(rows);
-                    setToastMessage(msg || '❌ ไม่พบตัวเลขวงเงินในไฟล์'); setTimeout(() => setToastMessage(''), 4000);
+                    const res = processBudgetRows(rows);
+                    if (!res) { setToastMessage('❌ ไม่พบตัวเลขวงเงินในไฟล์'); setTimeout(() => setToastMessage(''), 3000); return; }
+                    setToastMessage(res.msg); setTimeout(() => setToastMessage(''), 4000);
+                    await persistImportedBudget(res);
                 } catch (err) {
                     console.error(err);
                     setToastMessage('❌ อ่านไฟล์ไม่สำเร็จ'); setTimeout(() => setToastMessage(''), 3000);
@@ -636,12 +640,14 @@
                 const csvUrl = `https://docs.google.com/spreadsheets/d/${idM[1]}/gviz/tq?tqx=out:csv${gidM ? `&gid=${gidM[1]}` : ''}&_=${Date.now()}`;
                 setIsFetchingGsheet(true);
                 try {
-                    const res = await fetch(csvUrl);
-                    if (!res.ok) throw new Error('network');
-                    const wb = XLSX.read(await res.text(), { type: 'string' });
+                    const resp = await fetch(csvUrl);
+                    if (!resp.ok) throw new Error('network');
+                    const wb = XLSX.read(await resp.text(), { type: 'string' });
                     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false, defval: '' });
-                    const msg = processBudgetRows(rows);
-                    setToastMessage(msg || '❌ ไม่พบตารางวงเงินในชีต (ตรวจแท็บ/การแชร์)'); setTimeout(() => setToastMessage(''), 4500);
+                    const res = processBudgetRows(rows);
+                    if (!res) { setToastMessage('❌ ไม่พบตารางวงเงินในชีต (ตรวจแท็บ/การแชร์)'); setTimeout(() => setToastMessage(''), 4000); return; }
+                    setToastMessage(res.msg); setTimeout(() => setToastMessage(''), 4500);
+                    await persistImportedBudget(res);
                 } catch (err) {
                     console.error(err);
                     setToastMessage('❌ ดึง Google Sheet ไม่สำเร็จ (ตั้งค่าแชร์ "ทุกคนที่มีลิงก์")'); setTimeout(() => setToastMessage(''), 4500);
@@ -1183,12 +1189,17 @@
                 setIsModalOpen(false);
             };
 
+            // บันทึกวงเงินลงชีต (ใช้ร่วมกัน) — รับค่าชัดเจน ไม่พึ่ง state ล่าสุด
+            const pushBudgetToSheet = async ({ month, budget8, budget1, budget1Extra, totalBudget }) => {
+                const payload = { month, budget8, budget1, budget1Extra, totalBudget, timestamp: new Date().toLocaleString('th-TH') };
+                await fetch('https://script.google.com/macros/s/AKfycbxcX8Gv5e52G_uNEC2YxBdaxfogkbPIuZgqrX83iPfdp4Lbt7_7_Vwofe491cbSgNg7/exec', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            };
+
             const handleSaveToSheet = async () => {
                 if (!selectedMonth) return setToastMessage('❌ กรุณาเลือกเดือนก่อนทำการบันทึก');
                 setIsSaving(true);
                 try {
-                    const payload = { month: selectedMonth, budget8: budget8Percent, budget1: computed1Percent.toFixed(2), budget1Extra: computed1PercentExtra.toFixed(2), totalBudget: totalGroupBudget, timestamp: new Date().toLocaleString('th-TH') };
-                    await fetch('https://script.google.com/macros/s/AKfycbxcX8Gv5e52G_uNEC2YxBdaxfogkbPIuZgqrX83iPfdp4Lbt7_7_Vwofe491cbSgNg7/exec', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    await pushBudgetToSheet({ month: selectedMonth, budget8: budget8Percent, budget1: computed1Percent.toFixed(2), budget1Extra: computed1PercentExtra.toFixed(2), totalBudget: totalGroupBudget });
                     setToastMessage(`✅ บันทึกข้อมูลเรียบร้อยแล้ว`);
                     setTimeout(() => setToastMessage(''), 3000);
                     setTimeout(() => {
@@ -1200,6 +1211,20 @@
                 } finally {
                     setIsSaving(false);
                 }
+            };
+
+            // บันทึกค่าที่นำเข้าลง localStorage (เปิดใหม่ใช้ได้เลย) + บันทึกลงชีตอัตโนมัติ
+            const persistImportedBudget = async (res) => {
+                try { localStorage.setItem('nursingApp_importedBudget', JSON.stringify({ b8: res.b8, b1: res.b1, bx: res.bx })); } catch (e) {}
+                if (!selectedMonth) return; // ยังไม่ได้เลือกเดือน — เก็บ localStorage ไว้ก่อน
+                const b8 = res.b8 != null ? res.b8 : (parseFloat(budget8Percent) || 0);
+                const b1 = res.b1 != null ? res.b1 : (parseFloat(budget1PercentState) || 0);
+                const bx = res.bx != null ? res.bx : (parseFloat(budget1PercentExtraState) || 0);
+                try {
+                    await pushBudgetToSheet({ month: selectedMonth, budget8: b8.toFixed(2), budget1: b1.toFixed(2), budget1Extra: bx.toFixed(2), totalBudget: (b8 + b1 + bx).toFixed(2) });
+                    setToastMessage('💾 บันทึกลงชีตอัตโนมัติแล้ว · เปิดใหม่ดึงมาใช้ได้เลย');
+                    setTimeout(() => setToastMessage(''), 3500);
+                } catch (e) { /* เงียบไว้ — localStorage มีค่าแล้ว */ }
             };
 
             return (
