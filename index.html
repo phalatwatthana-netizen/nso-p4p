@@ -2170,17 +2170,6 @@
                                           การจัดการบุคลากร
                                         </h2>
                                         <div className="flex gap-2 w-full md:w-auto">
-                                            <select 
-                                              value={selectedFilterDept} 
-                                              onChange={(e) => setSelectedFilterDept(e.target.value)}
-                                              className="px-3 py-2 bg-emerald-800/50 border border-emerald-400/50 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/50 cursor-pointer"
-                                            >
-                                              <option value="">ทุกหน่วยงาน</option>
-                                              {departments.map(d => (
-                                                <option key={d.id} value={d.name}>{d.name}</option>
-                                              ))}
-                                            </select>
-
                                             <div className="relative flex-1 md:w-56">
                                                 <SearchIcon size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-200" />
                                                 <input 
@@ -2199,7 +2188,31 @@
                                             </button>
                                         </div>
                                     </div>
-                                    
+
+                                    {/* --- แถบปุ่มการ์ดกรองตามหน่วยงาน (คลิกหน่วยเพื่อแสดงรายชื่อ) --- */}
+                                    <div className="mop-gradient-soft px-4 md:px-5 py-4 border-b border-emerald-100">
+                                        <p className="text-xs font-bold text-emerald-800 mb-2.5 flex items-center gap-1.5">
+                                            <Building2 size={14} /> เลือกหน่วยงานเพื่อแสดงรายชื่อ
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {(() => {
+                                                const dCol = staffHeaders[5] || 'Column_F';
+                                                const countFor = (name) => staffList.filter(s => String(s[dCol] || '').trim() === name).length;
+                                                const items = [{ name: '', label: 'ทั้งหมด', count: staffList.length }, ...departments.map(d => ({ name: d.name, label: d.name, count: countFor(d.name) }))];
+                                                return items.map(({ name, label, count }) => {
+                                                    const active = selectedFilterDept === name;
+                                                    return (
+                                                        <button key={name || 'all'} onClick={() => setSelectedFilterDept(name)}
+                                                            className={`mop-shine inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-bold border transition-all ${active ? 'mop-gradient text-white border-transparent shadow-premium -translate-y-0.5' : 'bg-white text-emerald-800 border-emerald-200 hover:border-emerald-400 hover:-translate-y-0.5 hover:shadow-sm'}`}>
+                                                            <span className="truncate max-w-[12rem]">{label}</span>
+                                                            <span className={`text-[11px] font-extrabold px-1.5 py-0.5 rounded-full ${active ? 'bg-white/25 text-white' : 'bg-emerald-50 text-emerald-700'}`}>{count}</span>
+                                                        </button>
+                                                    );
+                                                });
+                                            })()}
+                                        </div>
+                                    </div>
+
                                     <div className="overflow-x-auto max-h-[70vh] rounded-b-2xl border-t border-emerald-200">
                                         {isStaffLoading ? (
                                             <div className="p-12 flex flex-col items-center justify-center text-emerald-600">
