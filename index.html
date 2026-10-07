@@ -533,17 +533,25 @@
                     if (headRow === -1 && /RN/.test(t) && /แพทย์/.test(t)) headRow = parseInt(r);
                 });
                 if (profRowIdx !== -1 && headRow !== -1) {
+                    // แถว "รวมทั้งสิ้น" = จำนวนคนของแต่ละวิชาชีพ (ใช้หารหาค่าตัว/คน)
+                    let countRowIdx = -1;
+                    Object.keys(rowText).forEach(r => { if (countRowIdx === -1 && /รวมทั้งสิ้น/.test(norm(rowText[r]))) countRowIdx = parseInt(r); });
                     const sumCell = cells.find(x => x.r === headRow && norm(x.text) === 'รวม');
                     const sumCol = sumCell ? sumCell.c : null;
                     const items = [];
                     cells.filter(x => x.r === headRow && x.text && toFloat(x.text) === null).sort((a, b) => a.c - b.c).forEach(h => {
                         if (sumCol !== null && h.c >= sumCol) return;
                         const amt = cellNumAt(profRowIdx, h.c);
-                        if (amt !== null) items.push({ name: h.text, amount: amt });
+                        if (amt !== null) {
+                            const count = countRowIdx !== -1 ? cellNumAt(countRowIdx, h.c) : null;
+                            const rate = (count && count > 0) ? amt / count : null; // ค่าตัว/คน
+                            items.push({ name: h.text, amount: amt, count, rate });
+                        }
                     });
                     if (items.length) {
                         const total = (sumCol !== null && cellNumAt(profRowIdx, sumCol) !== null) ? cellNumAt(profRowIdx, sumCol) : items.reduce((s, p) => s + p.amount, 0);
-                        setProfessionBudget({ items, total });
+                        const totalCount = countRowIdx !== -1 ? ((sumCol !== null && cellNumAt(countRowIdx, sumCol) !== null) ? cellNumAt(countRowIdx, sumCol) : items.reduce((s, p) => s + (p.count || 0), 0)) : null;
+                        setProfessionBudget({ items, total, totalCount });
                     }
                 }
 
@@ -1991,13 +1999,27 @@
                                             <div key={i} className="rounded-xl border border-teal-100 bg-gradient-to-b from-white to-teal-50/60 p-3 text-center shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
                                                 <p className="text-xs font-bold text-teal-700 truncate" title={p.name}>{p.name}</p>
                                                 <p className="text-base lg:text-lg font-extrabold text-teal-900 mt-1">{p.amount.toLocaleString('th-TH')}</p>
+                                                {p.count != null && (
+                                                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">{p.count.toLocaleString('th-TH')} คน</p>
+                                                )}
+                                                {p.rate != null && (
+                                                    <div className="mt-1.5 pt-1.5 border-t border-dashed border-teal-100">
+                                                        <p className="text-[10px] text-slate-500 font-medium">ค่าตัว/คน</p>
+                                                        <p className="text-sm font-extrabold mop-text-gradient">{p.rate.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
-                                    <div className="px-5 py-3 border-t border-teal-100 bg-teal-50/60 flex justify-end items-baseline gap-2">
-                                        <span className="text-sm font-bold text-teal-700">รวมทั้งสิ้น</span>
-                                        <span className="text-xl lg:text-2xl font-extrabold mop-text-gradient">{professionBudget.total.toLocaleString('th-TH')}</span>
-                                        <span className="text-xs text-slate-400">บาท/เดือน</span>
+                                    <div className="px-5 py-3 border-t border-teal-100 bg-teal-50/60 flex flex-wrap justify-end items-baseline gap-x-4 gap-y-1">
+                                        {professionBudget.totalCount != null && (
+                                            <span className="text-sm text-slate-500 font-medium">รวม <span className="font-bold text-teal-700">{professionBudget.totalCount.toLocaleString('th-TH')}</span> คน</span>
+                                        )}
+                                        <span className="text-sm font-bold text-teal-700 flex items-baseline gap-2">
+                                            วงเงินรวม
+                                            <span className="text-xl lg:text-2xl font-extrabold mop-text-gradient">{professionBudget.total.toLocaleString('th-TH')}</span>
+                                            <span className="text-xs text-slate-400">บาท/เดือน</span>
+                                        </span>
                                     </div>
                                 </div>
                             )}
