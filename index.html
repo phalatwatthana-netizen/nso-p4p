@@ -1487,9 +1487,10 @@
                                                         basePay = parseFloat(String(basePayRow.values[criteriaColIdx]).replace(/,/g, '')) || 0;
                                                     }
 
+                                                    // เรทตัดลาของคนทั่วไป = แถว "ตัดเงินค่าตัว..." เท่านั้น (ไม่ใช่แถว HW ของหัวหน้า)
                                                     const dedRow = criteriaData.find(item => {
                                                         const g = String(item.group);
-                                                        return g.includes('ตัดเงิน');
+                                                        return g.includes('ตัดเงินค่าตัว');
                                                     });
                                                     if (dedRow && dedRow.values[criteriaColIdx]) {
                                                         deductionRate = parseFloat(String(dedRow.values[criteriaColIdx]).replace(/,/g, '')) || 0;
