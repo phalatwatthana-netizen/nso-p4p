@@ -1494,22 +1494,32 @@
                                                 const pointsBaseBaht = originalAmtToUse + (parseFloat(addAmt) || 0) - (parseFloat(reduceAmt) || 0);
                                                 const lc1Percent = override.lc1Percent !== undefined ? override.lc1Percent : (parsedLc1 || 0);
                                                 const remark = override.remark !== undefined ? override.remark : '';
+                                                // เงินค่าตัวที่ถูกหักจากการลาจริง (ไม่ให้ติดลบ)
+                                                const leaveDeduction = isAutoCalculated ? Math.max(0, basePay - computedOriginalAmt) : 0;
 
-                                                return { 
-                                                    ...staff, 
-                                                    fullName, 
-                                                    minGuarantee, 
-                                                    lc1Percent, 
-                                                    leaveDays, 
-                                                    remark, 
-                                                    originalAmt: displayOriginalAmt, 
+                                                return {
+                                                    ...staff,
+                                                    fullName,
+                                                    minGuarantee,
+                                                    lc1Percent,
+                                                    leaveDays,
+                                                    remark,
+                                                    originalAmt: displayOriginalAmt,
                                                     computedOriginalAmt,
                                                     isAutoCalculated,
-                                                    addAmt, 
+                                                    addAmt,
                                                     reduceAmt,
-                                                    pointsBaseBaht
+                                                    pointsBaseBaht,
+                                                    basePay,
+                                                    parsedLeaveDays,
+                                                    leaveDeduction
                                                 };
                                             });
+
+                                            // --- เฉลี่ยคืนเงินหักลา: รวมยอดหักทั้งวอร์ด แล้วแบ่งให้ "คนไม่ลา" ตามสัดส่วนค่าตัว ---
+                                            const leavePot = preResolvedStaffList.reduce((sum, s) => sum + (s.leaveDeduction || 0), 0);
+                                            const redistRecipients = preResolvedStaffList.filter(s => s.parsedLeaveDays === 0 && s.basePay > 0);
+                                            const sumRecipBasePay = redistRecipients.reduce((sum, s) => sum + s.basePay, 0);
 
                                             // 2. ดึงค่าเฉลี่ยบาท/แต้ม ที่กำหนดโดยผู้ใช้ (ค่าเริ่มต้น 4)
                                             const ratePerPointInput = budgetInfo.ratePerPoint !== undefined ? budgetInfo.ratePerPoint : '4';
@@ -1517,24 +1527,36 @@
 
                                             // 3. นำอัตรามาประมวลผลเป็นแต้มจ่ายจริงรายบุคคลตามสูตร
                                             const fullyResolvedStaff = preResolvedStaffList.map(s => {
+                                                // ส่วนแบ่งเงินหักลาที่เฉลี่ยคืน (เฉพาะคนไม่ลา ตามสัดส่วนค่าตัว)
+                                                const redistributed = (s.parsedLeaveDays === 0 && s.basePay > 0 && sumRecipBasePay > 0)
+                                                    ? (leavePot * s.basePay / sumRecipBasePay) : 0;
+                                                // ฐานค่าตัวสำหรับคิดแต้ม = ค่าตัวหลังหัก + เงินเฉลี่ยคืน + เพิ่ม - ลด
+                                                const pointsBaseBaht = s.pointsBaseBaht + redistributed;
+
                                                 // แต้มที่ทำได้คือ ค่าตัวหารด้วยเฉลี่ยบาท/แต้ม 3-5บวกประกันขั้นต่ำ
-                                                const rawPointsFromBaht = averageBahtPerPoint > 0 ? (s.pointsBaseBaht / averageBahtPerPoint) : 0;
+                                                const rawPointsFromBaht = averageBahtPerPoint > 0 ? (pointsBaseBaht / averageBahtPerPoint) : 0;
                                                 const pointsEarned = rawPointsFromBaht + s.minGuarantee;
-                                                
+
                                                 // แต้มเกินขั้นต่ำคือ =IF((แต้มทำได้-ประกันขั้นต่ำ)<=0,0,(แต้มทำได้-ประกันขั้นต่ำ))
                                                 const excessPoints = (pointsEarned - s.minGuarantee) <= 0 ? 0 : (pointsEarned - s.minGuarantee);
-                                                
+
                                                 // ใช้เงิน 8 % คือ =แต้มเกินขั้นต่ำ*เฉลี่ยบาท/แต้ม
                                                 const allocated8 = excessPoints * averageBahtPerPoint;
-                                                
-                                                return { 
-                                                    ...s, 
-                                                    pointsEarned, 
-                                                    excessPoints, 
-                                                    allocated8, 
-                                                    totalReceived: allocated8 + s.lc1Percent 
+
+                                                return {
+                                                    ...s,
+                                                    redistributed,
+                                                    pointsBaseBaht,
+                                                    pointsEarned,
+                                                    excessPoints,
+                                                    allocated8,
+                                                    totalReceived: allocated8 + s.lc1Percent
                                                 };
                                             });
+
+                                            // ยอดสรุปการเฉลี่ยคืนเงินหักลา
+                                            const totalRedistributed = fullyResolvedStaff.reduce((sum, s) => sum + (s.redistributed || 0), 0);
+                                            const redistRecipientCount = redistRecipients.length;
 
                                             // --- คำนวณยอดสรุปรวมท้ายตาราง ---
                                             const totalPointsEarned = fullyResolvedStaff.reduce((sum, s) => sum + s.pointsEarned, 0);
@@ -1548,6 +1570,15 @@
 
                                             return (
                                                 <div className="space-y-6">
+                                                    {leavePot > 0 && (
+                                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm shadow-sm">
+                                                            <span className="font-bold text-amber-800">💸 หักเงินค่าตัวลา</span>
+                                                            <span>รวมหักจากคนลา <b className="text-rose-700 num">{leavePot.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> บาท</span>
+                                                            <span className="text-slate-400">→</span>
+                                                            <span>เฉลี่ยคืนให้คนไม่ลา <b className="text-emerald-700">{redistRecipientCount}</b> คน <span className="text-slate-500">(ตามสัดส่วนค่าตัว)</span></span>
+                                                            <span>รวมคืน <b className="text-emerald-700 num">{totalRedistributed.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> บาท</span>
+                                                        </div>
+                                                    )}
                                                     <div className="flex flex-col lg:flex-row justify-between gap-6 bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-inner">
                                                         <div className="flex-1 flex items-center">
                                                             <div className="bg-teal-50 border border-teal-200 rounded-xl p-5 w-full shadow-sm">
