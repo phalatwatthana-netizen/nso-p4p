@@ -192,6 +192,14 @@
             { id: 9, name: "งานอุบัติเหตุและฉุกเฉิน", staffCount: 17, balance: 36458.36 },
         ];
 
+        // แผนที่ เดือน → gid ของแท็บ "นับหน่วยย่อย-<เดือน>" (gviz เลือกแท็บด้วย gid เท่านั้น; sheet=<ชื่อ> ถูกเพิกเฉย)
+        const MONTH_GID = {
+            'กันยายน': '1532454690',
+            'ตุลาคม': '1740656541',
+            'พฤศจิกายน': '1141152492',
+            'ธันวาคม': '93751449',
+        };
+
         function App() {
             // --- State Management ---
             const [currentView, setCurrentView] = useState('admin');
@@ -634,10 +642,12 @@
             const importBudgetFromGoogleSheet = async () => {
                 if (typeof XLSX === 'undefined') { setToastMessage('❌ โหลดตัวอ่านไฟล์ไม่สำเร็จ (ตรวจอินเทอร์เน็ต)'); setTimeout(() => setToastMessage(''), 3500); return; }
                 if (!selectedMonth) { setToastMessage('❌ เลือกเดือนก่อน แล้วค่อยกดดึง'); setTimeout(() => setToastMessage(''), 3000); return; }
-                // ดึงจากไฟล์เดิมของระบบ แท็บ "นับหน่วยย่อย-<เดือน>" — ไม่ต้องวางลิงก์
+                // ดึงจากไฟล์เดิมของระบบ แท็บ "นับหน่วยย่อย-<เดือน>" ด้วย gid (gviz เลือกแท็บด้วย gid เท่านั้น)
                 const sheetId = '1N-zsUJruW7F50CoUElf0YeFg9cVA2TU4ORFjpyljPJo';
                 const tabName = 'นับหน่วยย่อย-' + selectedMonth;
-                const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}&_=${Date.now()}`;
+                const gid = MONTH_GID[selectedMonth];
+                if (!gid) { setToastMessage(`❌ ยังไม่ได้ตั้งค่าแท็บเดือน "${selectedMonth}" (แจ้งผู้ดูแลเพิ่ม gid ของ "${tabName}")`); setTimeout(() => setToastMessage(''), 5000); return; }
+                const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}&_=${Date.now()}`;
                 setIsFetchingGsheet(true);
                 try {
                     const resp = await fetch(csvUrl);
