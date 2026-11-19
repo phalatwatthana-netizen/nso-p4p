@@ -196,6 +196,7 @@
             // --- State Management ---
             const [currentView, setCurrentView] = useState('admin');
             const [selectedWardDept, setSelectedWardDept] = useState(null);
+            const [expandedWardStat, setExpandedWardStat] = useState(null); // 'deptName:category' สำหรับเปิดดูรายชื่อบนการ์ดเมนู
             const [adminSection, setAdminSection] = useState(null); // null = หน้าเลือกการ์ดเมนู Admin
 
             const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -1259,6 +1260,8 @@
                         <option value="ลาป่วย" />
                         <option value="เรียนต่อเฉพาะทาง" />
                         <option value="แต้มไม่ถึง" />
+                        <option value="ย้ายออก" />
+                        <option value="ลาแต้มไม่ถึงย้ายกองกลาง" />
                         <option value="อื่นๆ" />
                     </datalist>
 
@@ -1335,17 +1338,65 @@
                                             <p className="text-teal-600 mt-2 font-medium">โปรดเลือกหน่วยงานของท่านเพื่อเข้าสู่ระบบจัดการและตรวจสอบตารางค่าตอบแทน</p>
                                         </div>
                                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
-                                            {departments.map((dept) => (
-                                                <div key={dept.name} onClick={() => setSelectedWardDept(dept)} className="mop-card group cursor-pointer p-6 flex flex-col items-center justify-center gap-4">
-                                                    <div className="mop-card-ico w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-white shadow-premium" style={{ background: 'linear-gradient(135deg,#00897B,#00BFA5,#80E0B5)' }}>
-                                                        <Building2 size={32} className="md:w-10 md:h-10 drop-shadow" />
+                                            {departments.map((dept) => {
+                                                // --- สรุปสถานะรายหน่วยจากช่องหมายเหตุ (remark) ---
+                                                const deptCol = staffHeaders[5] || '';
+                                                const prefixCol = staffHeaders[2] || '';
+                                                const nameCol = staffHeaders[3] || '';
+                                                const posCol = staffHeaders[6] || '';
+                                                const members = staffList.filter(st => String(st[deptCol] || '').trim() === dept.name);
+                                                const nameOf = (st) => `${st[prefixCol] || ''} ${st[nameCol] || ''}`.trim() || '(ไม่มีชื่อ)';
+                                                const remarkOf = (st) => String((staffOverrides[st._id] || {}).remark || '').trim();
+                                                const positions = new Set(members.map(st => String(st[posCol] || '').trim()).filter(Boolean)).size;
+                                                const grp = { movedOut: [], pointsShort: [], central: [] };
+                                                members.forEach(st => {
+                                                    const r = remarkOf(st);
+                                                    if (r.includes('กองกลาง')) grp.central.push(nameOf(st));            // ลา/แต้มไม่ถึง ย้ายกองกลาง
+                                                    else if (r.includes('ย้ายออก')) grp.movedOut.push(nameOf(st));      // ย้ายออก
+                                                    else if (r.includes('แต้มไม่ถึง')) grp.pointsShort.push(nameOf(st)); // แต้มไม่ถึง (คงอยู่)
+                                                });
+                                                const cats = [
+                                                    { key: 'movedOut', label: 'ย้ายออก', list: grp.movedOut, cls: 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100' },
+                                                    { key: 'pointsShort', label: 'แต้มไม่ถึง', list: grp.pointsShort, cls: 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' },
+                                                    { key: 'central', label: 'ลา/ย้ายกองกลาง', list: grp.central, cls: 'bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100' },
+                                                ];
+                                                const openCat = cats.find(c => expandedWardStat === `${dept.name}:${c.key}`);
+                                                return (
+                                                <div key={dept.name} onClick={() => setSelectedWardDept(dept)} className="mop-card group cursor-pointer p-5 flex flex-col items-center justify-start gap-3">
+                                                    <div className="mop-card-ico w-14 h-14 md:w-16 md:h-16 rounded-2xl flex items-center justify-center text-white shadow-premium shrink-0" style={{ background: 'linear-gradient(135deg,#00897B,#00BFA5,#80E0B5)' }}>
+                                                        <Building2 size={28} className="md:w-9 md:h-9 drop-shadow" />
                                                     </div>
                                                     <div className="text-center w-full">
                                                         <h3 className="text-sm md:text-base font-bold text-teal-900 line-clamp-2 leading-tight min-h-[2.5rem] flex items-center justify-center">{dept.name}</h3>
-                                                        <div className="mt-3 inline-block bg-white px-3 py-1 rounded-full border border-teal-200 text-xs font-bold text-teal-700 shadow-sm">{dept.staffCount} คน</div>
+                                                        <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+                                                            <span className="bg-white px-2.5 py-1 rounded-full border border-teal-200 text-xs font-bold text-teal-700 shadow-sm">{dept.staffCount} คน</span>
+                                                            <span className="bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200 text-xs font-bold text-slate-600">ตำแหน่ง {positions}</span>
+                                                        </div>
+                                                        {cats.some(c => c.list.length > 0) && (
+                                                            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+                                                                {cats.filter(c => c.list.length > 0).map(c => (
+                                                                    <button key={c.key} onClick={(e) => { e.stopPropagation(); setExpandedWardStat(expandedWardStat === `${dept.name}:${c.key}` ? null : `${dept.name}:${c.key}`); }}
+                                                                        className={`px-2 py-0.5 rounded-full border text-[11px] font-bold transition-colors ${c.cls} ${expandedWardStat === `${dept.name}:${c.key}` ? 'ring-2 ring-offset-1 ring-current' : ''}`}>
+                                                                        {c.label} {c.list.length}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        {openCat && (
+                                                            <div onClick={(e) => e.stopPropagation()} className="mt-2 text-left bg-white rounded-xl border border-slate-200 p-2.5 text-[11px] text-slate-700 shadow-inner cursor-default">
+                                                                <div className="font-bold text-slate-500 mb-1 flex items-center justify-between">
+                                                                    <span>{openCat.label} ({openCat.list.length} คน)</span>
+                                                                    <button onClick={(e) => { e.stopPropagation(); setExpandedWardStat(null); }} className="text-slate-400 hover:text-slate-700 font-bold">✕</button>
+                                                                </div>
+                                                                <ol className="list-decimal list-inside space-y-0.5 max-h-40 overflow-auto">
+                                                                    {openCat.list.map((nm, i) => <li key={i} className="leading-snug">{nm}</li>)}
+                                                                </ol>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </>
                                 ) : (
@@ -1622,6 +1673,8 @@
                                                           <option value="ลาป่วย" />
                                                           <option value="เรียนต่อเฉพาะทาง" />
                                                           <option value="แต้มไม่ถึง" />
+                                                          <option value="ย้ายออก" />
+                                                          <option value="ลาแต้มไม่ถึงย้ายกองกลาง" />
                                                           <option value="อื่นๆ" />
                                                         </datalist>
 
