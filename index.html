@@ -1440,7 +1440,10 @@
                                         {(() => {
                                             const deptColName = staffHeaders[5] || '';
                                             const wardStaffRaw = staffList.filter(staff => String(staff[deptColName] || '').trim() === selectedWardDept.name);
-                                            
+
+                                            // หน่วยหัวหน้า HW: ใช้เรทตัดลาแถว "HW10%" แทนเรทปกติ
+                                            const isHWUnit = String(selectedWardDept.name || '').toLowerCase().includes('hw');
+
                                             // คำนวณงบประมาณ
                                             const W_total = getWardTotalBudget(selectedWardDept);
                                             const budgetInfo = wardBudgetStates[selectedWardDept.id] || { returned: '', central: '' };
@@ -1487,11 +1490,10 @@
                                                         basePay = parseFloat(String(basePayRow.values[criteriaColIdx]).replace(/,/g, '')) || 0;
                                                     }
 
-                                                    // เรทตัดลาของคนทั่วไป = แถว "ตัดเงินค่าตัว..." เท่านั้น (ไม่ใช่แถว HW ของหัวหน้า)
-                                                    const dedRow = criteriaData.find(item => {
-                                                        const g = String(item.group);
-                                                        return g.includes('ตัดเงินค่าตัว');
-                                                    });
+                                                    // หน่วย HW ใช้แถว "HW10%"; หน่วยปกติใช้แถว "ตัดเงินค่าตัว..."
+                                                    let dedRow = null;
+                                                    if (isHWUnit) dedRow = criteriaData.find(item => String(item.group).includes('HW10%'));
+                                                    if (!dedRow) dedRow = criteriaData.find(item => String(item.group).includes('ตัดเงินค่าตัว'));
                                                     if (dedRow && dedRow.values[criteriaColIdx]) {
                                                         deductionRate = parseFloat(String(dedRow.values[criteriaColIdx]).replace(/,/g, '')) || 0;
                                                     }
