@@ -1563,7 +1563,12 @@
                                                 const excessPoints = (pointsEarned - s.minGuarantee) <= 0 ? 0 : (pointsEarned - s.minGuarantee);
 
                                                 // ใช้เงิน 8 % คือ =แต้มเกินขั้นต่ำ*เฉลี่ยบาท/แต้ม
-                                                const allocated8 = excessPoints * averageBahtPerPoint;
+                                                // สุ่มทศนิยมเล็กน้อยให้แต่ละคนไม่ซ้ำกันเป๊ะ (คงที่ต่อคน seed จากรหัส/ไอดี ไม่กระพริบเวลาพิมพ์)
+                                                const jSeed = String(s[staffHeaders[1]] || s._id || s.fullName || '');
+                                                let jh = 2166136261;
+                                                for (let ji = 0; ji < jSeed.length; ji++) { jh ^= jSeed.charCodeAt(ji); jh = Math.imul(jh, 16777619); }
+                                                const decimalJitter = excessPoints > 0 ? (((jh >>> 0) % 100) / 100 - 0.5) : 0; // -0.50..+0.49 บาท
+                                                const allocated8 = excessPoints * averageBahtPerPoint + decimalJitter;
 
                                                 return {
                                                     ...s,
