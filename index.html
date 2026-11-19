@@ -1678,13 +1678,13 @@
                                                                 <tbody>
                                                                     {criteriaData.filter(item => {
                                                                         const g = String(item.group);
-                                                                        return (g.includes('ค่าตัว') || g.includes('ตัดเงิน')) && !g.includes('ค่าตัว 50%') && !g.includes('ค่าตัวตามกลุ่ม');
+                                                                        return (g.includes('ค่าตัว') || g.includes('ตัดเงิน')) && !g.includes('ค่าตัว 50%') && !g.includes('ค่าตัวตามกลุ่ม') && (!g.includes('HW') || isHWUnit);
                                                                     }).length === 0 ? (
                                                                         <tr><td colSpan={criteriaHeaders.length + 1} className="p-4 text-center text-slate-500 font-medium">ไม่พบข้อมูลเกณฑ์อ้างอิงจากระบบ</td></tr>
                                                                     ) : (
                                                                         criteriaData.filter(item => {
                                                                             const g = String(item.group);
-                                                                            return (g.includes('ค่าตัว') || g.includes('ตัดเงิน')) && !g.includes('ค่าตัว 50%') && !g.includes('ค่าตัวตามกลุ่ม');
+                                                                            return (g.includes('ค่าตัว') || g.includes('ตัดเงิน')) && !g.includes('ค่าตัว 50%') && !g.includes('ค่าตัวตามกลุ่ม') && (!g.includes('HW') || isHWUnit);
                                                                         }).map((item) => (
                                                                             <tr key={item.id} className="hover:bg-cyan-50/30 border-b border-slate-100 last:border-0">
                                                                                 <td className="p-2.5 font-bold text-slate-800 border-r border-slate-100 whitespace-nowrap bg-slate-50">{item.group}</td>
