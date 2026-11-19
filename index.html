@@ -1264,6 +1264,8 @@
                         <option value="ย้ายเข้า" />
                         <option value="ตัดชื่อ" />
                         <option value="แต้มไม่ถึงย้ายกองกลาง" />
+                        <option value="เรียนย้ายกองกลาง" />
+                        <option value="ลาย้ายกองกลาง" />
                         <option value="อื่นๆ" />
                     </datalist>
 
@@ -1350,21 +1352,25 @@
                                                 const nameOf = (st) => `${st[prefixCol] || ''} ${st[nameCol] || ''}`.trim() || '(ไม่มีชื่อ)';
                                                 const remarkOf = (st) => String((staffOverrides[st._id] || {}).remark || '').trim();
                                                 const positions = new Set(members.map(st => String(st[posCol] || '').trim()).filter(Boolean)).size;
-                                                const grp = { movedOut: [], movedIn: [], cutName: [], pointsShort: [], central: [] };
+                                                const grp = { movedOut: [], movedIn: [], cutName: [], pointsCentral: [], studyLeaveCentral: [] };
                                                 members.forEach(st => {
                                                     const r = remarkOf(st);
-                                                    if (r.includes('กองกลาง')) grp.central.push(nameOf(st));            // ลา/แต้มไม่ถึง ย้ายกองกลาง
+                                                    if (r.includes('ย้ายออก')) grp.movedOut.push(nameOf(st));          // ย้ายออก
                                                     else if (r.includes('ย้ายเข้า')) grp.movedIn.push(nameOf(st));      // ย้ายเข้า
-                                                    else if (r.includes('ย้ายออก')) grp.movedOut.push(nameOf(st));      // ย้ายออก
                                                     else if (r.includes('ตัดชื่อ')) grp.cutName.push(nameOf(st));        // ตัดชื่อ
-                                                    else if (r.includes('แต้มไม่ถึง')) grp.pointsShort.push(nameOf(st)); // แต้มไม่ถึง (คงอยู่)
+                                                    else if (r.includes('กองกลาง')) {                                   // ย้ายกองกลาง — แยกตามเหตุผล
+                                                        // ตัดคำ "กองกลาง" ออกก่อน เพราะ "กลาง" มี "ลา" ซ่อนอยู่
+                                                        const rest = r.split('กองกลาง').join('');
+                                                        if (rest.includes('เรียน') || rest.includes('ลา')) grp.studyLeaveCentral.push(nameOf(st)); // เรียน/ลา
+                                                        else grp.pointsCentral.push(nameOf(st));                                                      // แต้มไม่ถึง
+                                                    }
                                                 });
                                                 const cats = [
                                                     { key: 'movedOut', label: 'ย้ายออก', list: grp.movedOut, cls: 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100' },
                                                     { key: 'movedIn', label: 'ย้ายเข้า', list: grp.movedIn, cls: 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' },
                                                     { key: 'cutName', label: 'ตัดชื่อ', list: grp.cutName, cls: 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200' },
-                                                    { key: 'pointsShort', label: 'แต้มไม่ถึง', list: grp.pointsShort, cls: 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' },
-                                                    { key: 'central', label: 'แต้มไม่ถึง/ย้ายกองกลาง', list: grp.central, cls: 'bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100' },
+                                                    { key: 'pointsCentral', label: 'แต้มไม่ถึง ย้ายกองกลาง', list: grp.pointsCentral, cls: 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' },
+                                                    { key: 'studyLeaveCentral', label: 'เรียน/ลา ย้ายกองกลาง', list: grp.studyLeaveCentral, cls: 'bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100' },
                                                 ];
                                                 const openCat = cats.find(c => expandedWardStat === `${dept.name}:${c.key}`);
                                                 return (
@@ -1683,6 +1689,8 @@
                                                           <option value="ย้ายเข้า" />
                                                           <option value="ตัดชื่อ" />
                                                           <option value="แต้มไม่ถึงย้ายกองกลาง" />
+                                                          <option value="เรียนย้ายกองกลาง" />
+                                                          <option value="ลาย้ายกองกลาง" />
                                                           <option value="อื่นๆ" />
                                                         </datalist>
 
