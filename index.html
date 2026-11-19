@@ -1084,7 +1084,7 @@
                 setIsAddCriteriaModalOpen(true);
             };
 
-            // แก้ค่าในตารางเกณฑ์แบบ inline (ใช้กับแถว "ตัดเงินค่าตัวลา") — อัปเดต state ทันที (เรียลไทม์กับหน้า Ward)
+            // แก้ค่าในตารางเกณฑ์แบบ inline (ใช้กับแถว "ตัดเงิน..." เช่น ตัดเงินค่าตัวเมื่อลา) — อัปเดต state ทันที (เรียลไทม์กับหน้า Ward)
             const updateCriteriaLocal = (rowId, colIdx, newVal) => {
                 setCriteriaData(prev => prev.map(c => c.id === rowId
                     ? { ...c, values: c.values.map((v, i) => i === colIdx ? newVal : v) }
@@ -1489,7 +1489,7 @@
 
                                                     const dedRow = criteriaData.find(item => {
                                                         const g = String(item.group);
-                                                        return g.includes('ตัดเงินค่าตัวลา');
+                                                        return g.includes('ตัดเงิน');
                                                     });
                                                     if (dedRow && dedRow.values[criteriaColIdx]) {
                                                         deductionRate = parseFloat(String(dedRow.values[criteriaColIdx]).replace(/,/g, '')) || 0;
@@ -1675,13 +1675,13 @@
                                                                 <tbody>
                                                                     {criteriaData.filter(item => {
                                                                         const g = String(item.group);
-                                                                        return (g.includes('ค่าตัว') || g.includes('ตัดเงินค่าตัวลา')) && !g.includes('ค่าตัว 50%') && !g.includes('ค่าตัวตามกลุ่ม');
+                                                                        return (g.includes('ค่าตัว') || g.includes('ตัดเงิน')) && !g.includes('ค่าตัว 50%') && !g.includes('ค่าตัวตามกลุ่ม');
                                                                     }).length === 0 ? (
                                                                         <tr><td colSpan={criteriaHeaders.length + 1} className="p-4 text-center text-slate-500 font-medium">ไม่พบข้อมูลเกณฑ์อ้างอิงจากระบบ</td></tr>
                                                                     ) : (
                                                                         criteriaData.filter(item => {
                                                                             const g = String(item.group);
-                                                                            return (g.includes('ค่าตัว') || g.includes('ตัดเงินค่าตัวลา')) && !g.includes('ค่าตัว 50%') && !g.includes('ค่าตัวตามกลุ่ม');
+                                                                            return (g.includes('ค่าตัว') || g.includes('ตัดเงิน')) && !g.includes('ค่าตัว 50%') && !g.includes('ค่าตัวตามกลุ่ม');
                                                                         }).map((item) => (
                                                                             <tr key={item.id} className="hover:bg-cyan-50/30 border-b border-slate-100 last:border-0">
                                                                                 <td className="p-2.5 font-bold text-slate-800 border-r border-slate-100 whitespace-nowrap bg-slate-50">{item.group}</td>
@@ -2223,7 +2223,7 @@
                                         <h2 className="text-xl font-bold flex items-center gap-2 drop-shadow-sm">
                                             <ClipboardList size={24} className="text-blue-200"/>
                                             <span>ตารางค่าตัวและเกณฑ์แบ่งกลุ่ม
-                                                <span className="block text-xs font-normal text-blue-100 mt-0.5">แถว “ตัดเงินค่าตัวลา” แก้ตัวเลขได้เลย (บาท/วัน ต่อกลุ่ม) — มีผลเรียลไทม์กับการหัก+เฉลี่ยคืนในหน้า Ward</span>
+                                                <span className="block text-xs font-normal text-blue-100 mt-0.5">แถว “ตัดเงินค่าตัวเมื่อลา” แก้ตัวเลขได้เลย (บาท/ครั้ง ต่อกลุ่ม) — มีผลเรียลไทม์กับการหัก+เฉลี่ยคืนในหน้า Ward</span>
                                             </span>
                                         </h2>
                                         <div className="flex gap-2">
@@ -2265,7 +2265,7 @@
                                                 </thead>
                                                 <tbody>
                                                     {criteriaData.map((item) => {
-                                                        const isDedRow = String(item.group || '').includes('ตัดเงินค่าตัวลา'); // แถวเรทตัดลา/วัน — แก้ inline ได้
+                                                        const isDedRow = String(item.group || '').includes('ตัดเงิน'); // แถวเรทตัดลา/วัน — แก้ inline ได้
                                                         return (
                                                         <tr key={item.id} className={`border-b border-slate-100 transition-colors ${isDedRow ? 'bg-amber-50/70 hover:bg-amber-50' : 'hover:bg-blue-50/50'}`}>
                                                             <td className="p-4 font-bold text-slate-800 border-r border-slate-100 whitespace-nowrap">
