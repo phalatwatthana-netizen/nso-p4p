@@ -638,7 +638,11 @@
                 const idM = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
                 if (!idM) { setToastMessage('❌ ลิงก์ไม่ถูกต้อง (ต้องเป็นลิงก์ Google Sheets)'); setTimeout(() => setToastMessage(''), 3500); return; }
                 const gidM = url.match(/[#&?]gid=([0-9]+)/);
-                const csvUrl = `https://docs.google.com/spreadsheets/d/${idM[1]}/gviz/tq?tqx=out:csv${gidM ? `&gid=${gidM[1]}` : ''}&_=${Date.now()}`;
+                // เลือกเดือนไว้ → ดึงจากแท็บ "นับหน่วยย่อย-<เดือน>" ตามเดือน; ไม่งั้นใช้ gid จากลิงก์
+                const sheetParam = selectedMonth
+                    ? `&sheet=${encodeURIComponent('นับหน่วยย่อย-' + selectedMonth)}`
+                    : (gidM ? `&gid=${gidM[1]}` : '');
+                const csvUrl = `https://docs.google.com/spreadsheets/d/${idM[1]}/gviz/tq?tqx=out:csv${sheetParam}&_=${Date.now()}`;
                 setIsFetchingGsheet(true);
                 try {
                     const resp = await fetch(csvUrl);
@@ -646,7 +650,7 @@
                     const wb = XLSX.read(await resp.text(), { type: 'string' });
                     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false, defval: '' });
                     const res = processBudgetRows(rows);
-                    if (!res) { setToastMessage('❌ ไม่พบตารางวงเงินในชีต (ตรวจแท็บ/การแชร์)'); setTimeout(() => setToastMessage(''), 4000); return; }
+                    if (!res) { setToastMessage(`❌ ไม่พบตารางวงเงินในแท็บ "${selectedMonth ? 'นับหน่วยย่อย-' + selectedMonth : 'ที่เลือก'}" (ตรวจชื่อแท็บ/การแชร์)`); setTimeout(() => setToastMessage(''), 4500); return; }
                     setToastMessage(res.msg); setTimeout(() => setToastMessage(''), 4500);
                     await persistImportedBudget(res);
                 } catch (err) {
@@ -2111,14 +2115,15 @@
                                         <input type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden"
                                             onChange={(e) => { if (e.target.files && e.target.files[0]) importBudgetFromFile(e.target.files[0]); e.target.value = ''; }} />
                                     </label>
-                                    {/* ดึงจาก Google Sheet */}
+                                    {/* ดึงจาก Google Sheet — เลือกเดือนแล้วระบบจะอ่านแท็บ "นับหน่วยย่อย-<เดือน>" */}
                                     <div className="flex items-center gap-1.5">
                                         <input type="text" value={gsheetUrl} onChange={(e) => setGsheetUrl(e.target.value)}
-                                            placeholder="วางลิงก์ Google Sheet (เปิดแท็บตารางที่ 2 แล้วคัดลอก URL)"
+                                            placeholder="วางลิงก์ Google Sheet แล้วเลือกเดือน → ดึงแท็บ “นับหน่วยย่อย-<เดือน>”"
                                             className="flex-1 min-w-0 bg-teal-900/40 border border-teal-500/50 rounded-lg px-2.5 py-1.5 text-[11px] text-white placeholder-teal-200/60 outline-none focus:ring-2 focus:ring-emerald-400/60" />
                                         <button onClick={importBudgetFromGoogleSheet} disabled={isFetchingGsheet}
-                                            className="shrink-0 flex items-center gap-1 bg-emerald-500 hover:bg-emerald-400 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all shadow-sm disabled:opacity-50">
-                                            {isFetchingGsheet ? <RefreshCw size={13} className="animate-spin" /> : <RefreshCw size={13} />} ดึง
+                                            className="shrink-0 flex items-center gap-1 bg-emerald-500 hover:bg-emerald-400 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all shadow-sm disabled:opacity-50"
+                                            title={selectedMonth ? `ดึงจากแท็บ "นับหน่วยย่อย-${selectedMonth}"` : 'เลือกเดือนก่อนเพื่อดึงตามแท็บรายเดือน'}>
+                                            {isFetchingGsheet ? <RefreshCw size={13} className="animate-spin" /> : <RefreshCw size={13} />} ดึง{selectedMonth ? ` ${selectedMonth}` : ''}
                                         </button>
                                     </div>
                                     <div className="flex justify-between items-end border-t border-teal-500/50 pt-3 mt-auto w-full">
