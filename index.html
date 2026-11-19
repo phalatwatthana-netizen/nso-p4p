@@ -632,17 +632,12 @@
             };
 
             const importBudgetFromGoogleSheet = async () => {
-                const url = gsheetUrl.trim();
-                if (!url) { setToastMessage('❌ วางลิงก์ Google Sheet ก่อน'); setTimeout(() => setToastMessage(''), 3000); return; }
                 if (typeof XLSX === 'undefined') { setToastMessage('❌ โหลดตัวอ่านไฟล์ไม่สำเร็จ (ตรวจอินเทอร์เน็ต)'); setTimeout(() => setToastMessage(''), 3500); return; }
-                const idM = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-                if (!idM) { setToastMessage('❌ ลิงก์ไม่ถูกต้อง (ต้องเป็นลิงก์ Google Sheets)'); setTimeout(() => setToastMessage(''), 3500); return; }
-                const gidM = url.match(/[#&?]gid=([0-9]+)/);
-                // เลือกเดือนไว้ → ดึงจากแท็บ "นับหน่วยย่อย-<เดือน>" ตามเดือน; ไม่งั้นใช้ gid จากลิงก์
-                const sheetParam = selectedMonth
-                    ? `&sheet=${encodeURIComponent('นับหน่วยย่อย-' + selectedMonth)}`
-                    : (gidM ? `&gid=${gidM[1]}` : '');
-                const csvUrl = `https://docs.google.com/spreadsheets/d/${idM[1]}/gviz/tq?tqx=out:csv${sheetParam}&_=${Date.now()}`;
+                if (!selectedMonth) { setToastMessage('❌ เลือกเดือนก่อน แล้วค่อยกดดึง'); setTimeout(() => setToastMessage(''), 3000); return; }
+                // ดึงจากไฟล์เดิมของระบบ แท็บ "นับหน่วยย่อย-<เดือน>" — ไม่ต้องวางลิงก์
+                const sheetId = '1N-zsUJruW7F50CoUElf0YeFg9cVA2TU4ORFjpyljPJo';
+                const tabName = 'นับหน่วยย่อย-' + selectedMonth;
+                const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}&_=${Date.now()}`;
                 setIsFetchingGsheet(true);
                 try {
                     const resp = await fetch(csvUrl);
@@ -650,12 +645,12 @@
                     const wb = XLSX.read(await resp.text(), { type: 'string' });
                     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false, defval: '' });
                     const res = processBudgetRows(rows);
-                    if (!res) { setToastMessage(`❌ ไม่พบตารางวงเงินในแท็บ "${selectedMonth ? 'นับหน่วยย่อย-' + selectedMonth : 'ที่เลือก'}" (ตรวจชื่อแท็บ/การแชร์)`); setTimeout(() => setToastMessage(''), 4500); return; }
+                    if (!res) { setToastMessage(`❌ ไม่พบตารางวงเงินในแท็บ "${tabName}" (ตรวจชื่อแท็บ/การแชร์)`); setTimeout(() => setToastMessage(''), 4500); return; }
                     setToastMessage(res.msg); setTimeout(() => setToastMessage(''), 4500);
                     await persistImportedBudget(res);
                 } catch (err) {
                     console.error(err);
-                    setToastMessage('❌ ดึง Google Sheet ไม่สำเร็จ (ตั้งค่าแชร์ "ทุกคนที่มีลิงก์")'); setTimeout(() => setToastMessage(''), 4500);
+                    setToastMessage(`❌ ดึงแท็บ "${tabName}" ไม่สำเร็จ (ตรวจชื่อแท็บ/ตั้งค่าแชร์ "ทุกคนที่มีลิงก์")`); setTimeout(() => setToastMessage(''), 4500);
                 } finally {
                     setIsFetchingGsheet(false);
                 }
@@ -2115,17 +2110,13 @@
                                         <input type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden"
                                             onChange={(e) => { if (e.target.files && e.target.files[0]) importBudgetFromFile(e.target.files[0]); e.target.value = ''; }} />
                                     </label>
-                                    {/* ดึงจาก Google Sheet — เลือกเดือนแล้วระบบจะอ่านแท็บ "นับหน่วยย่อย-<เดือน>" */}
-                                    <div className="flex items-center gap-1.5">
-                                        <input type="text" value={gsheetUrl} onChange={(e) => setGsheetUrl(e.target.value)}
-                                            placeholder="วางลิงก์ Google Sheet แล้วเลือกเดือน → ดึงแท็บ “นับหน่วยย่อย-<เดือน>”"
-                                            className="flex-1 min-w-0 bg-teal-900/40 border border-teal-500/50 rounded-lg px-2.5 py-1.5 text-[11px] text-white placeholder-teal-200/60 outline-none focus:ring-2 focus:ring-emerald-400/60" />
-                                        <button onClick={importBudgetFromGoogleSheet} disabled={isFetchingGsheet}
-                                            className="shrink-0 flex items-center gap-1 bg-emerald-500 hover:bg-emerald-400 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all shadow-sm disabled:opacity-50"
-                                            title={selectedMonth ? `ดึงจากแท็บ "นับหน่วยย่อย-${selectedMonth}"` : 'เลือกเดือนก่อนเพื่อดึงตามแท็บรายเดือน'}>
-                                            {isFetchingGsheet ? <RefreshCw size={13} className="animate-spin" /> : <RefreshCw size={13} />} ดึง{selectedMonth ? ` ${selectedMonth}` : ''}
-                                        </button>
-                                    </div>
+                                    {/* ดึงงบรายเดือนจากไฟล์เดิม แท็บ "นับหน่วยย่อย-<เดือน>" — ไม่ต้องวางลิงก์ */}
+                                    <button onClick={importBudgetFromGoogleSheet} disabled={isFetchingGsheet || !selectedMonth}
+                                        className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title={selectedMonth ? `ดึงจากแท็บ "นับหน่วยย่อย-${selectedMonth}"` : 'เลือกเดือนก่อน'}>
+                                        {isFetchingGsheet ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                                        {selectedMonth ? `ดึงงบเดือน ${selectedMonth} จากชีต` : 'เลือกเดือนก่อน แล้วกดดึงงบ'}
+                                    </button>
                                     <div className="flex justify-between items-end border-t border-teal-500/50 pt-3 mt-auto w-full">
                                         <div><span className="text-xs font-medium text-teal-100 block mb-0.5">รวมทั้งสิ้น</span><p className="text-lg lg:text-xl font-bold drop-shadow-sm">{formatCurrency(totalGroupBudget)}</p></div>
                                         <button onClick={handleSaveToSheet} disabled={isSaving} className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
