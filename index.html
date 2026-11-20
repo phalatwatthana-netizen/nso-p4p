@@ -2155,7 +2155,9 @@
                                     <>
                                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                                             {departments.map((dept) => {
-                                                const members = staffList.filter(st => String(st[deptCol] || '').trim() === dept.name);
+                                                // คนที่ย้ายออก + ปลายทางยืนยันรับแล้ว = ถือว่าไปอยู่หน่วยปลายทาง → เอาออกจากรายชื่อหน่วยเดิม
+                                                const hasLeft = (st) => { const o = staffOverrides[st._id] || {}; return String(o.remark || '').includes('ย้ายออก') && o.moveTo && o.acceptIn; };
+                                                const members = staffList.filter(st => String(st[deptCol] || '').trim() === dept.name && !hasLeft(st));
                                                 // คนที่ "ย้ายออก" จากหน่วยอื่น โดยระบุปลายทาง = หน่วยนี้ → มาเด้งเป็น "รับเข้า"
                                                 const incoming = staffList.filter(st => { const o = staffOverrides[st._id] || {}; return String(o.remark || '').includes('ย้ายออก') && o.moveTo === dept.name; });
                                                 if (members.length === 0 && incoming.length === 0) return null;
