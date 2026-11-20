@@ -328,6 +328,10 @@
                 const saved = localStorage.getItem('nursingApp_wardBudgetStates');
                 return saved ? JSON.parse(saved) : {};
             });
+            // สถานะ "บันทึกการจัดสรร" รายหน่วย (keyed by ชื่อหน่วย) — ใช้แสดงป้าย จัดสรรครบ/ไม่ครบ ในเมนู Ward
+            const [savedWards, setSavedWards] = useState(() => {
+                try { return JSON.parse(localStorage.getItem('nursingApp_savedWards') || '{}'); } catch (e) { return {}; }
+            });
             const [wardSubGroupInfo, setWardSubGroupInfo] = useState(() => {
                 const saved = localStorage.getItem('nursingApp_wardSubGroupInfo');
                 return saved ? JSON.parse(saved) : {};
@@ -384,6 +388,7 @@
             useEffect(() => { localStorage.setItem('nursingApp_budgetSettings', JSON.stringify(budgetSettings)); }, [budgetSettings]);
             useEffect(() => { localStorage.setItem('nursingApp_staffOverrides', JSON.stringify(staffOverrides)); }, [staffOverrides]);
             useEffect(() => { localStorage.setItem('nursingApp_wardBudgetStates', JSON.stringify(wardBudgetStates)); }, [wardBudgetStates]);
+            useEffect(() => { localStorage.setItem('nursingApp_savedWards', JSON.stringify(savedWards)); }, [savedWards]);
             useEffect(() => { localStorage.setItem('nursingApp_wardSubGroupInfo', JSON.stringify(wardSubGroupInfo)); }, [wardSubGroupInfo]);
             useEffect(() => { localStorage.setItem('nursingApp_adminExtraAllocations', JSON.stringify(adminExtraAllocations)); }, [adminExtraAllocations]);
             useEffect(() => { localStorage.setItem('nursingApp_staffDeptOverrides', JSON.stringify(staffDeptOverrides)); }, [staffDeptOverrides]);
@@ -1402,6 +1407,11 @@
                                                     { key: 'studyLeaveCentral', label: 'เรียน/ลา ย้ายกองกลาง', list: grp.studyLeaveCentral, cls: 'bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100' },
                                                 ];
                                                 const openCat = cats.find(c => expandedWardStat === `${dept.name}:${c.key}`);
+                                                // สถานะ "วันลา" ครบ = ทุกคนในหน่วยกรอกช่องวันลาแล้ว (ไม่เว้นว่าง; ใส่ 0 ก็นับ)
+                                                const leaveRecorded = members.filter(st => { const v = (staffOverrides[st._id] || {}).leaveDays; return v !== undefined && String(v).trim() !== ''; }).length;
+                                                const leaveDone = members.length > 0 && leaveRecorded === members.length;
+                                                // สถานะ "จัดสรร" ครบ = กดบันทึกการจัดสรรของหน่วยนี้แล้ว
+                                                const allocDone = !!savedWards[dept.name];
                                                 return (
                                                 <div key={dept.name} onClick={() => setSelectedWardDept(dept)} className="mop-card group cursor-pointer p-5 flex flex-col items-center justify-start gap-3">
                                                     <div className="mop-card-ico w-14 h-14 md:w-16 md:h-16 rounded-2xl flex items-center justify-center text-white shadow-premium shrink-0" style={{ background: 'linear-gradient(135deg,#00897B,#00BFA5,#80E0B5)' }}>
@@ -1412,6 +1422,17 @@
                                                         <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
                                                             <span className="bg-white px-2.5 py-1 rounded-full border border-teal-200 text-xs font-bold text-teal-700 shadow-sm">{dept.staffCount} คน</span>
                                                             <span className="bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200 text-xs font-bold text-slate-600">ตำแหน่ง {positions}</span>
+                                                        </div>
+                                                        {/* ป้ายสถานะพรีเมียม: วันลา / จัดสรร ครบ–ไม่ครบ */}
+                                                        <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+                                                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold border shadow-sm ${leaveDone ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-emerald-400' : 'bg-gradient-to-r from-amber-50 to-orange-100 text-amber-800 border-amber-300'}`}
+                                                                title={leaveDone ? 'บันทึกวันลาครบทุกคน' : `กรอกวันลาแล้ว ${leaveRecorded}/${members.length} คน`}>
+                                                                {leaveDone ? '✓' : '⚠'} วันลา {leaveDone ? 'ครบ' : `${leaveRecorded}/${members.length}`}
+                                                            </span>
+                                                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold border shadow-sm ${allocDone ? 'bg-gradient-to-r from-sky-500 to-indigo-500 text-white border-sky-400' : 'bg-slate-100 text-slate-400 border-slate-300'}`}
+                                                                title={allocDone ? 'บันทึกการจัดสรรแล้ว' : 'ยังไม่ได้บันทึกการจัดสรร'}>
+                                                                {allocDone ? '✓' : '○'} จัดสรร {allocDone ? 'ครบ' : 'ไม่ครบ'}
+                                                            </span>
                                                         </div>
                                                         <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
                                                             {cats.map(c => {
@@ -1444,9 +1465,21 @@
                                     </>
                                 ) : (
                                     <div className="animate-in slide-in-from-right duration-350">
-                                        <button onClick={() => setSelectedWardDept(null)} className="mb-4 inline-flex items-center gap-2 text-teal-700 hover:text-teal-950 font-bold transition-colors text-sm bg-teal-50 hover:bg-teal-100 px-4 py-2 rounded-xl border border-teal-200 shadow-sm">
-                                            ← ย้อนกลับไปเลือกหน่วยงานอื่น
-                                        </button>
+                                        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                                            <button onClick={() => setSelectedWardDept(null)} className="inline-flex items-center gap-2 text-teal-700 hover:text-teal-950 font-bold transition-colors text-sm bg-teal-50 hover:bg-teal-100 px-4 py-2 rounded-xl border border-teal-200 shadow-sm">
+                                                ← ย้อนกลับไปเลือกหน่วยงานอื่น
+                                            </button>
+                                            {(() => {
+                                                const done = !!savedWards[selectedWardDept.name];
+                                                return (
+                                                    <button onClick={() => { setSavedWards(prev => ({ ...prev, [selectedWardDept.name]: !prev[selectedWardDept.name] })); setToastMessage(done ? 'ยกเลิกสถานะจัดสรรแล้ว' : '✅ บันทึกการจัดสรรหน่วยนี้แล้ว'); setTimeout(() => setToastMessage(''), 2500); }}
+                                                        className={`inline-flex items-center gap-2 font-bold text-sm px-4 py-2 rounded-xl border shadow-sm transition-all ${done ? 'bg-gradient-to-r from-sky-500 to-indigo-500 text-white border-sky-400 hover:brightness-110' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                                                        title={done ? 'คลิกเพื่อยกเลิกสถานะจัดสรรครบ' : 'คลิกเมื่อจัดสรรหน่วยนี้เสร็จ'}>
+                                                        {done ? '✓ จัดสรรครบแล้ว' : '○ ทำเครื่องหมายจัดสรรครบ'}
+                                                    </button>
+                                                );
+                                            })()}
+                                        </div>
                                         {(() => {
                                             const deptColName = staffHeaders[5] || '';
                                             const wardStaffRaw = staffList.filter(staff => String(staff[deptColName] || '').trim() === selectedWardDept.name);
