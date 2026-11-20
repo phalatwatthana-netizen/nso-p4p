@@ -193,7 +193,7 @@
         ];
 
         // Apps Script Web App (/exec) — ใช้ทั้งบันทึกข้อมูล และดึงงบรายเดือน (doGet JSONP: action=get_month_budget)
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyg8UHSO1S5FHxsyV-hvR1JebboGXiULx4fJGlF9b_n_1stlXOoecSDCDfJfcxWumto/exec';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbymOlSYbZnGgVOcCULjKK6dbOrrFCmcsKEBN9vD8qGIPgKGQepFLwFNgH8vQ1Epgt7mZQ/exec';
 
         function App() {
             // --- State Management ---
@@ -830,7 +830,7 @@
                         empId: empId,
                         newDept: newValue
                     };
-                    await fetch('https://script.google.com/macros/s/AKfycbyg8UHSO1S5FHxsyV-hvR1JebboGXiULx4fJGlF9b_n_1stlXOoecSDCDfJfcxWumto/exec', {
+                    await fetch('https://script.google.com/macros/s/AKfycbymOlSYbZnGgVOcCULjKK6dbOrrFCmcsKEBN9vD8qGIPgKGQepFLwFNgH8vQ1Epgt7mZQ/exec', {
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
@@ -929,7 +929,7 @@
                         newStaff: newStaffForm,
                         headers: staffHeaders
                     };
-                    await fetch('https://script.google.com/macros/s/AKfycbyg8UHSO1S5FHxsyV-hvR1JebboGXiULx4fJGlF9b_n_1stlXOoecSDCDfJfcxWumto/exec', {
+                    await fetch('https://script.google.com/macros/s/AKfycbymOlSYbZnGgVOcCULjKK6dbOrrFCmcsKEBN9vD8qGIPgKGQepFLwFNgH8vQ1Epgt7mZQ/exec', {
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
@@ -986,7 +986,7 @@
                         action: 'add_department',
                         departmentName: trimmedName
                     };
-                    fetch('https://script.google.com/macros/s/AKfycbyg8UHSO1S5FHxsyV-hvR1JebboGXiULx4fJGlF9b_n_1stlXOoecSDCDfJfcxWumto/exec', {
+                    fetch('https://script.google.com/macros/s/AKfycbymOlSYbZnGgVOcCULjKK6dbOrrFCmcsKEBN9vD8qGIPgKGQepFLwFNgH8vQ1Epgt7mZQ/exec', {
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
@@ -1035,7 +1035,7 @@
                 // 5. ส่งคำสั่งไป Google Sheet Background (เผื่ออนาคตแอดมินเขียนรองรับลบชีตไว้)
                 try {
                     const payload = { action: 'delete_department', departmentName: dept.name };
-                    fetch('https://script.google.com/macros/s/AKfycbyg8UHSO1S5FHxsyV-hvR1JebboGXiULx4fJGlF9b_n_1stlXOoecSDCDfJfcxWumto/exec', {
+                    fetch('https://script.google.com/macros/s/AKfycbymOlSYbZnGgVOcCULjKK6dbOrrFCmcsKEBN9vD8qGIPgKGQepFLwFNgH8vQ1Epgt7mZQ/exec', {
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
@@ -1056,7 +1056,7 @@
                         values: criteriaHeaders.map(h => newCriteriaForm[h] || '')
                     };
                     
-                    await fetch('https://script.google.com/macros/s/AKfycbyg8UHSO1S5FHxsyV-hvR1JebboGXiULx4fJGlF9b_n_1stlXOoecSDCDfJfcxWumto/exec', {
+                    await fetch('https://script.google.com/macros/s/AKfycbymOlSYbZnGgVOcCULjKK6dbOrrFCmcsKEBN9vD8qGIPgKGQepFLwFNgH8vQ1Epgt7mZQ/exec', {
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
@@ -1105,7 +1105,7 @@
                 if (!row) return;
                 try {
                     const payload = { action: 'update_criteria', rowId: rowId, group: row.group, values: row.values };
-                    fetch('https://script.google.com/macros/s/AKfycbyg8UHSO1S5FHxsyV-hvR1JebboGXiULx4fJGlF9b_n_1stlXOoecSDCDfJfcxWumto/exec', {
+                    fetch('https://script.google.com/macros/s/AKfycbymOlSYbZnGgVOcCULjKK6dbOrrFCmcsKEBN9vD8qGIPgKGQepFLwFNgH8vQ1Epgt7mZQ/exec', {
                         method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
                     });
                     setToastMessage('✅ บันทึกเรทตัดลาลงชีตแล้ว'); setTimeout(() => setToastMessage(''), 2000);
@@ -1118,7 +1118,7 @@
                 setIsUpdatingStaff(true);
                 try {
                     const payload = { action: 'delete_criteria', rowId: item.id };
-                    await fetch('https://script.google.com/macros/s/AKfycbyg8UHSO1S5FHxsyV-hvR1JebboGXiULx4fJGlF9b_n_1stlXOoecSDCDfJfcxWumto/exec', {
+                    await fetch('https://script.google.com/macros/s/AKfycbymOlSYbZnGgVOcCULjKK6dbOrrFCmcsKEBN9vD8qGIPgKGQepFLwFNgH8vQ1Epgt7mZQ/exec', {
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
@@ -2716,7 +2716,7 @@
                                                                                         localStorage.setItem('nursingApp_customDepartments', JSON.stringify(newCustomDepts));
                                                                                     }
                                                                                     const payload = { action: 'add_department', departmentName: newDept };
-                                                                                    fetch('https://script.google.com/macros/s/AKfycbyg8UHSO1S5FHxsyV-hvR1JebboGXiULx4fJGlF9b_n_1stlXOoecSDCDfJfcxWumto/exec', {
+                                                                                    fetch('https://script.google.com/macros/s/AKfycbymOlSYbZnGgVOcCULjKK6dbOrrFCmcsKEBN9vD8qGIPgKGQepFLwFNgH8vQ1Epgt7mZQ/exec', {
                                                                                         method: 'POST',
                                                                                         mode: 'no-cors',
                                                                                         headers: { 'Content-Type': 'application/json' },
@@ -2938,7 +2938,7 @@
                                                                 localStorage.setItem('nursingApp_customDepartments', JSON.stringify(newCustomDepts));
                                                             }
                                                             const payload = { action: 'add_department', departmentName: newDept };
-                                                            fetch('https://script.google.com/macros/s/AKfycbyg8UHSO1S5FHxsyV-hvR1JebboGXiULx4fJGlF9b_n_1stlXOoecSDCDfJfcxWumto/exec', {
+                                                            fetch('https://script.google.com/macros/s/AKfycbymOlSYbZnGgVOcCULjKK6dbOrrFCmcsKEBN9vD8qGIPgKGQepFLwFNgH8vQ1Epgt7mZQ/exec', {
                                                                 method: 'POST',
                                                                 mode: 'no-cors',
                                                                 headers: { 'Content-Type': 'application/json' },

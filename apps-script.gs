@@ -2,7 +2,7 @@
  * Google Apps Script — ระบบ P4P (รพ.ศรีสังวรสุโขทัย)
  * ไฟล์นี้เก็บไว้ใน GitHub เพื่ออ้างอิง/เวอร์ชัน — ตัวจริงต้องวางในโปรเจกต์ Apps Script
  * ที่ผูกกับชีต แล้ว Deploy เป็น Web app (/exec) ให้ได้ URL เดิมที่แอปใช้อยู่:
- *   https://script.google.com/macros/s/AKfycbyg8UHSO1S5FHxsyV-hvR1JebboGXiULx4fJGlF9b_n_1stlXOoecSDCDfJfcxWumto/exec
+ *   https://script.google.com/macros/s/AKfycbymOlSYbZnGgVOcCULjKK6dbOrrFCmcsKEBN9vD8qGIPgKGQepFLwFNgH8vQ1Epgt7mZQ/exec
  *
  * การ Deploy:
  *   Deploy → Manage deployments → Edit (ดินสอ) deployment เดิม → Version: New version → Deploy
