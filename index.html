@@ -2156,15 +2156,21 @@
                                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                                             {departments.map((dept) => {
                                                 const members = staffList.filter(st => String(st[deptCol] || '').trim() === dept.name);
-                                                if (members.length === 0) return null;
+                                                // คนที่ "ย้ายออก" จากหน่วยอื่น โดยระบุปลายทาง = หน่วยนี้ → มาเด้งเป็น "รับเข้า"
+                                                const incoming = staffList.filter(st => { const o = staffOverrides[st._id] || {}; return String(o.remark || '').includes('ย้ายออก') && o.moveTo === dept.name; });
+                                                if (members.length === 0 && incoming.length === 0) return null;
+                                                const pendingIncoming = incoming.filter(st => !(staffOverrides[st._id] || {}).acceptIn).length;
                                                 const reported = members.filter(st => classifyStatus((staffOverrides[st._id] || {}).remark)).length;
                                                 const open = !!openStatusDepts[dept.name];
                                                 return (
-                                                    <div key={dept.name} className="rounded-2xl border border-teal-100 bg-gradient-to-b from-white to-teal-50/40 shadow-sm overflow-hidden flex flex-col">
+                                                    <div key={dept.name} className={`rounded-2xl border bg-gradient-to-b from-white to-teal-50/40 shadow-sm overflow-hidden flex flex-col ${pendingIncoming > 0 ? 'border-amber-300 ring-2 ring-amber-300/70' : 'border-teal-100'}`}>
                                                         <button onClick={() => setOpenStatusDepts(prev => ({ ...prev, [dept.name]: !prev[dept.name] }))}
                                                             className="mop-gradient text-white px-4 py-2.5 flex items-center justify-between gap-2 w-full text-left hover:brightness-110 transition">
                                                             <span className="font-bold text-sm truncate" title={dept.name}>{dept.name}</span>
                                                             <span className="flex items-center gap-2 shrink-0">
+                                                                {incoming.length > 0 && (
+                                                                    <span className={`text-[11px] font-extrabold rounded-full px-2 py-0.5 ${pendingIncoming > 0 ? 'bg-amber-300 text-amber-900 animate-pulse' : 'bg-white/25'}`} title="รับเข้าจากหน่วยอื่น">📥 {incoming.length}</span>
+                                                                )}
                                                                 <span className="text-[11px] font-bold bg-white/20 rounded-full px-2 py-0.5">{reported}/{members.length}</span>
                                                                 <span className={`w-6 h-6 flex items-center justify-center rounded-full bg-white/20 font-bold transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>▾</span>
                                                             </span>
@@ -2216,6 +2222,27 @@
                                                                     </div>
                                                                 );
                                                             })}
+                                                            {incoming.length > 0 && (
+                                                                <div className="mt-2 border-t-2 border-amber-200 pt-2">
+                                                                    <div className="px-1.5 text-[11px] font-extrabold text-amber-700 mb-1">📥 รับเข้า (ย้ายมาจากหน่วยอื่น){pendingIncoming > 0 ? ` · รอยืนยัน ${pendingIncoming}` : ''}</div>
+                                                                    {incoming.map((st) => {
+                                                                        const ov = staffOverrides[st._id] || {};
+                                                                        const from = String(st[deptCol] || '').trim() || '-';
+                                                                        return (
+                                                                            <div key={'in' + st._id} className="px-1.5 py-1.5 rounded-lg bg-amber-50/60 border-b border-amber-100 last:border-0">
+                                                                                <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
+                                                                                    <span className="flex-1 min-w-[120px] truncate text-[13px] font-medium text-slate-700" title={nameOf(st)}>{nameOf(st)}</span>
+                                                                                    <span className="shrink-0 text-emerald-700 font-semibold">มาจาก: <b>{from}</b></span>
+                                                                                    <button onClick={() => setField(st._id, 'acceptIn', !ov.acceptIn)}
+                                                                                        className={`shrink-0 px-2 py-1 rounded-lg font-bold border transition ${ov.acceptIn ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-emerald-400' : 'bg-white text-amber-700 border-amber-300 hover:bg-amber-50'}`}>
+                                                                                        {ov.acceptIn ? '✓ ยืนยันรับแล้ว' : 'ยืนยันรับย้ายเข้า'}
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                         )}
                                                     </div>
