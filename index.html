@@ -635,9 +635,10 @@
             };
 
             // ดึงงบรายเดือนผ่าน Apps Script (JSONP) — อ่านแท็บ "นับหน่วยย่อย-<เดือน>" ด้วยชื่อฝั่งเซิร์ฟเวอร์ รองรับทุกเดือนใหม่อัตโนมัติ
-            const importBudgetFromGoogleSheet = () => {
-                if (!selectedMonth) { setToastMessage('❌ เลือกเดือนก่อน แล้วค่อยกดดึง'); setTimeout(() => setToastMessage(''), 3000); return; }
-                const tabName = 'นับหน่วยย่อย-' + selectedMonth;
+            const importBudgetFromGoogleSheet = (monthArg) => {
+                const month = (typeof monthArg === 'string' && monthArg) ? monthArg : selectedMonth;
+                if (!month) { return; }
+                const tabName = 'นับหน่วยย่อย-' + month;
                 setIsFetchingGsheet(true);
                 const cbName = 'p4pBudgetCb_' + Date.now();
                 const script = document.createElement('script');
@@ -661,7 +662,7 @@
                     if (done) return; done = true; clearTimeout(timer); cleanup(); setIsFetchingGsheet(false);
                     setToastMessage('❌ เรียก Apps Script ไม่สำเร็จ (ยังไม่ได้เพิ่ม doGet หรือยังไม่ Deploy)'); setTimeout(() => setToastMessage(''), 6000);
                 };
-                script.src = APPS_SCRIPT_URL + '?action=get_month_budget&month=' + encodeURIComponent(selectedMonth)
+                script.src = APPS_SCRIPT_URL + '?action=get_month_budget&month=' + encodeURIComponent(month)
                     + '&callback=' + cbName + '&_=' + Date.now();
                 document.body.appendChild(script);
             };
@@ -2060,16 +2061,11 @@
                             {/* --- Dashboard Cards --- */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                                 <div
-                                    onDragOver={(e) => { e.preventDefault(); setIsBudgetDragOver(true); }}
-                                    onDragLeave={(e) => { e.preventDefault(); setIsBudgetDragOver(false); }}
-                                    onDrop={(e) => { e.preventDefault(); setIsBudgetDragOver(false); if (e.dataTransfer.files && e.dataTransfer.files[0]) importBudgetFromFile(e.dataTransfer.files[0]); }}
-                                    className={`relative overflow-hidden h-full bg-gradient-to-br from-teal-600 to-teal-800 rounded-2xl shadow-premium p-3 md:p-4 flex flex-col gap-2 transform hover:-translate-y-1 transition-transform border ${isBudgetDragOver ? 'border-emerald-300 ring-4 ring-emerald-300/60' : 'border-teal-500'}`}>
-                                    {/* โอเวอร์เลย์ขณะลากไฟล์ / กำลังนำเข้า */}
-                                    {(isBudgetDragOver || isImportingBudget) && (
+                                    className={`relative overflow-hidden h-full bg-gradient-to-br from-teal-600 to-teal-800 rounded-2xl shadow-premium p-3 md:p-4 flex flex-col gap-2 transform hover:-translate-y-1 transition-transform border border-teal-500`}>
+                                    {/* โอเวอร์เลย์ขณะกำลังดึงงบ */}
+                                    {isFetchingGsheet && (
                                         <div className="absolute inset-0 z-20 bg-teal-900/80 backdrop-blur-sm flex flex-col items-center justify-center gap-2 text-white rounded-2xl border-2 border-dashed border-emerald-300 pointer-events-none">
-                                            {isImportingBudget
-                                                ? (<><RefreshCw size={30} className="animate-spin text-emerald-200" /><p className="font-bold text-sm">กำลังอ่านไฟล์...</p></>)
-                                                : (<><Save size={30} className="text-emerald-200 animate-bounce" /><p className="font-bold text-sm">วางไฟล์ Excel / CSV ที่นี่</p></>)}
+                                            <RefreshCw size={30} className="animate-spin text-emerald-200" /><p className="font-bold text-sm">กำลังดึงงบเดือน {selectedMonth}…</p>
                                         </div>
                                     )}
                                     <div className="flex justify-between items-start gap-2">
@@ -2079,10 +2075,11 @@
                                             </div>
                                             <p className="text-teal-100 font-bold text-sm lg:text-base">วงเงินประจำเดือน</p>
                                         </div>
-                                        <select 
+                                        <select
                                             value={selectedMonth}
-                                            onChange={(e) => setSelectedMonth(e.target.value)}
-                                            className="bg-teal-900/80 text-white text-xs md:text-sm rounded px-2 py-1.5 outline-none font-bold border border-teal-500 hover:ring-2 ring-teal-400 transition-all cursor-pointer"
+                                            onChange={(e) => { const m = e.target.value; setSelectedMonth(m); if (m) importBudgetFromGoogleSheet(m); }}
+                                            disabled={isFetchingGsheet}
+                                            className="bg-teal-900/80 text-white text-xs md:text-sm rounded px-2 py-1.5 outline-none font-bold border border-teal-500 hover:ring-2 ring-teal-400 transition-all cursor-pointer disabled:opacity-60"
                                         >
                                             <option value="">เลือกเดือน...</option>
                                             <option value="มกราคม">มกราคม</option>
@@ -2113,20 +2110,14 @@
                                             <span className="font-extrabold text-white text-sm py-0.5">{parseFloat(budget1PercentExtraState).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                         </div>
                                     </div>
-                                    {/* แถบลากวาง/อัปโหลดไฟล์ เพื่อดึงค่า 8% และ 1% */}
-                                    <label className="group flex items-center justify-center gap-2 cursor-pointer rounded-xl border border-dashed border-emerald-300/70 bg-teal-900/30 hover:bg-teal-900/50 text-teal-100 hover:text-white px-3 py-2 text-[11px] lg:text-xs font-semibold transition-all">
-                                        <Save size={14} className="text-emerald-200 group-hover:scale-110 transition-transform" />
-                                        <span>ลากไฟล์ Excel/CSV มาวาง หรือ <span className="underline underline-offset-2">คลิกเพื่ออัปโหลด</span> (ดึงค่า 8% และ 1%)</span>
-                                        <input type="file" accept=".xlsx,.xls,.csv,.txt" className="hidden"
-                                            onChange={(e) => { if (e.target.files && e.target.files[0]) importBudgetFromFile(e.target.files[0]); e.target.value = ''; }} />
-                                    </label>
-                                    {/* ดึงงบรายเดือนจากไฟล์เดิม แท็บ "นับหน่วยย่อย-<เดือน>" — ไม่ต้องวางลิงก์ */}
-                                    <button onClick={importBudgetFromGoogleSheet} disabled={isFetchingGsheet || !selectedMonth}
-                                        className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                                        title={selectedMonth ? `ดึงจากแท็บ "นับหน่วยย่อย-${selectedMonth}"` : 'เลือกเดือนก่อน'}>
-                                        {isFetchingGsheet ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                                        {selectedMonth ? `ดึงงบเดือน ${selectedMonth} จากชีต` : 'เลือกเดือนก่อน แล้วกดดึงงบ'}
-                                    </button>
+                                    {/* เลือกเดือนจาก dropdown ด้านบน → ดึงงบจากแท็บ "นับหน่วยย่อย-<เดือน>" อัตโนมัติ */}
+                                    <div className="flex items-center justify-center gap-2 rounded-xl bg-teal-900/30 border border-teal-500/40 px-3 py-2 text-[11px] lg:text-xs font-semibold text-teal-100">
+                                        {isFetchingGsheet
+                                            ? (<><RefreshCw size={14} className="animate-spin text-emerald-200" /> กำลังดึงงบเดือน {selectedMonth}…</>)
+                                            : (selectedMonth
+                                                ? (<><span className="text-emerald-200">✓</span> งบเดือน {selectedMonth} (เลือกเดือนอื่นเพื่อดึงใหม่)</>)
+                                                : (<>เลือกเดือนจากด้านบน แล้วระบบจะดึงงบให้อัตโนมัติ</>))}
+                                    </div>
                                     <div className="flex justify-between items-end border-t border-teal-500/50 pt-3 mt-auto w-full">
                                         <div><span className="text-xs font-medium text-teal-100 block mb-0.5">รวมทั้งสิ้น</span><p className="text-lg lg:text-xl font-bold drop-shadow-sm">{formatCurrency(totalGroupBudget)}</p></div>
                                         <button onClick={handleSaveToSheet} disabled={isSaving} className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
