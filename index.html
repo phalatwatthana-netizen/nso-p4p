@@ -195,6 +195,41 @@
         // Apps Script Web App (/exec) — ใช้ทั้งบันทึกข้อมูล และดึงงบรายเดือน (doGet JSONP: action=get_month_budget)
         const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbymOlSYbZnGgVOcCULjKK6dbOrrFCmcsKEBN9vD8qGIPgKGQepFLwFNgH8vQ1Epgt7mZQ/exec';
 
+        // ตัวเลือกสถานะเจ้าหน้าที่ (เก็บลงช่องหมายเหตุ remark) — ใช้ในเมนู "รายงานสถานะ"
+        const STATUS_OPTIONS = [
+            { value: '',                      label: '— ปกติ / ยังไม่ระบุ —', cls: 'text-slate-400' },
+            { value: 'ย้ายออก',               label: 'ย้ายออก',              cls: 'text-rose-700' },
+            { value: 'ย้ายเข้า',              label: 'ย้ายเข้า',             cls: 'text-emerald-700' },
+            { value: 'ตัดชื่อ',               label: 'ตัดชื่อ',              cls: 'text-slate-700' },
+            { value: 'แต้มไม่ถึงย้ายกองกลาง',  label: 'แต้มไม่ถึง ย้ายกองกลาง', cls: 'text-amber-700' },
+            { value: 'เรียนย้ายกองกลาง',       label: 'เรียน ย้ายกองกลาง',     cls: 'text-violet-700' },
+            { value: 'ลาย้ายกองกลาง',          label: 'ลา ย้ายกองกลาง',       cls: 'text-violet-700' },
+            { value: 'แต้มไม่ถึง',            label: 'แต้มไม่ถึง (คงอยู่)',    cls: 'text-amber-700' },
+        ];
+        // จัดหมวดสถานะจากข้อความ remark (ใช้ตรรกะเดียวกับป้ายในเมนู Ward)
+        const classifyStatus = (r) => {
+            r = String(r || '').trim();
+            if (!r) return null;
+            if (r.includes('ย้ายออก')) return 'movedOut';
+            if (r.includes('ย้ายเข้า')) return 'movedIn';
+            if (r.includes('ตัดชื่อ')) return 'cutName';
+            if (r.includes('กองกลาง')) {
+                const rest = r.split('กองกลาง').join('');
+                return (rest.includes('เรียน') || rest.includes('ลา')) ? 'studyLeaveCentral' : 'pointsCentral';
+            }
+            if (r.includes('แต้มไม่ถึง')) return 'pointsShort';
+            return 'other';
+        };
+        const STATUS_META = {
+            movedOut:          { label: 'ย้ายออก',               cls: 'from-rose-500 to-pink-500' },
+            movedIn:           { label: 'ย้ายเข้า',              cls: 'from-emerald-500 to-teal-500' },
+            cutName:           { label: 'ตัดชื่อ',               cls: 'from-slate-500 to-slate-600' },
+            pointsCentral:     { label: 'แต้มไม่ถึง ย้ายกองกลาง',  cls: 'from-amber-500 to-orange-500' },
+            studyLeaveCentral: { label: 'เรียน/ลา ย้ายกองกลาง',    cls: 'from-violet-500 to-purple-500' },
+            pointsShort:       { label: 'แต้มไม่ถึง',            cls: 'from-yellow-500 to-amber-500' },
+            other:             { label: 'อื่น ๆ',                cls: 'from-cyan-500 to-blue-500' },
+        };
+
         function App() {
             // --- State Management ---
             const [currentView, setCurrentView] = useState('admin');
@@ -1328,6 +1363,7 @@
                                 {[
                                     { key: 'admin', label: 'เมนู Admin', Icon: UserCircle },
                                     { key: 'ward_head', label: 'เมนูหัวหน้า Ward', Icon: Users },
+                                    { key: 'status_report', label: 'รายงานสถานะ', Icon: ClipboardList },
                                 ].map(({ key, label, Icon }) => {
                                     const active = currentView === key;
                                     return (
@@ -2082,6 +2118,84 @@
                                         })()}
                                     </div>
                                 )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ========================================================= */}
+                    {/* ================== หน้าจอ รายงานสถานะ ==================== */}
+                    {/* ========================================================= */}
+                    {currentView === 'status_report' && (
+                        <div className="animate-in fade-in duration-300 mb-8">
+                            <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-premium border border-teal-100/70 p-6 md:p-8">
+                                <div className="mb-6 border-b-2 border-teal-100 pb-4">
+                                    <h2 className="text-2xl font-bold text-teal-800 flex items-center gap-3">
+                                        <ClipboardList size={32} className="text-teal-600" />
+                                        รายงานสถานะเจ้าหน้าที่
+                                    </h2>
+                                    <p className="text-teal-600 mt-2 font-medium">แต่ละหน่วยเลือกสถานะของเจ้าหน้าที่ (ย้าย/สลับหน่วยงาน) — เลือกแล้วบันทึกอัตโนมัติ</p>
+                                </div>
+                                {(() => {
+                                    const deptCol = staffHeaders[5] || '';
+                                    const prefixCol = staffHeaders[2] || '';
+                                    const nameCol = staffHeaders[3] || '';
+                                    const nameOf = (st) => `${st[prefixCol] || ''} ${st[nameCol] || ''}`.trim() || '(ไม่มีชื่อ)';
+                                    const setStatus = (id, val) => setStaffOverrides(prev => ({ ...prev, [id]: { ...(prev[id] || {}), remark: val } }));
+                                    // สรุปภาพรวมทุกหน่วย
+                                    const summary = {}; let totalReported = 0;
+                                    staffList.forEach(st => { const k = classifyStatus((staffOverrides[st._id] || {}).remark); if (k) { summary[k] = (summary[k] || 0) + 1; totalReported++; } });
+                                    if (staffList.length === 0) {
+                                        return <div className="p-8 text-center text-slate-400 font-medium">ยังไม่มีรายชื่อเจ้าหน้าที่ (กำลังโหลดจากชีต หรือยังไม่ได้ตั้งค่า)</div>;
+                                    }
+                                    return (
+                                    <>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                            {departments.map((dept) => {
+                                                const members = staffList.filter(st => String(st[deptCol] || '').trim() === dept.name);
+                                                if (members.length === 0) return null;
+                                                const reported = members.filter(st => classifyStatus((staffOverrides[st._id] || {}).remark)).length;
+                                                return (
+                                                    <div key={dept.name} className="rounded-2xl border border-teal-100 bg-gradient-to-b from-white to-teal-50/40 shadow-sm overflow-hidden flex flex-col">
+                                                        <div className="mop-gradient text-white px-4 py-2.5 flex items-center justify-between gap-2">
+                                                            <span className="font-bold text-sm truncate" title={dept.name}>{dept.name}</span>
+                                                            <span className="shrink-0 text-[11px] font-bold bg-white/20 rounded-full px-2 py-0.5">{reported}/{members.length}</span>
+                                                        </div>
+                                                        <div className="p-2 space-y-1 max-h-72 overflow-auto">
+                                                            {members.map((st) => {
+                                                                const val = (staffOverrides[st._id] || {}).remark || '';
+                                                                return (
+                                                                    <div key={st._id} className="flex items-center gap-2 px-1.5 py-1 rounded-lg hover:bg-teal-50/60">
+                                                                        <span className="flex-1 min-w-0 truncate text-[13px] text-slate-700" title={nameOf(st)}>{nameOf(st)}</span>
+                                                                        <select value={val} onChange={(e) => setStatus(st._id, e.target.value)}
+                                                                            className={`shrink-0 w-40 text-[12px] font-semibold rounded-lg border px-1.5 py-1 outline-none focus:ring-2 focus:ring-teal-400 ${val ? 'border-teal-300 bg-teal-50 text-teal-800' : 'border-slate-200 bg-white text-slate-400'}`}>
+                                                                            {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                                                        </select>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        {/* การ์ดใหญ่สรุปภาพรวม */}
+                                        <div className="mt-6 rounded-3xl p-6 text-white shadow-premium bg-gradient-to-br from-teal-700 via-teal-600 to-cyan-600">
+                                            <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+                                                <h3 className="text-xl font-extrabold flex items-center gap-2"><Star size={22} /> สรุปภาพรวมสถานะทั้งหมด</h3>
+                                                <span className="text-sm font-bold bg-white/20 rounded-full px-3 py-1">ระบุสถานะแล้ว {totalReported} / {staffList.length} คน</span>
+                                            </div>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+                                                {Object.keys(STATUS_META).map((k) => (
+                                                    <div key={k} className={`rounded-2xl p-3 text-center shadow bg-gradient-to-br ${STATUS_META[k].cls}`}>
+                                                        <div className="text-2xl font-extrabold num">{summary[k] || 0}</div>
+                                                        <div className="text-[11px] font-semibold opacity-95 leading-tight mt-0.5">{STATUS_META[k].label}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </>
+                                    );
+                                })()}
                             </div>
                         </div>
                     )}
