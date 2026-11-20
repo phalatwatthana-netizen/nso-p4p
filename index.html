@@ -367,6 +367,8 @@
             const [savedWards, setSavedWards] = useState(() => {
                 try { return JSON.parse(localStorage.getItem('nursingApp_savedWards') || '{}'); } catch (e) { return {}; }
             });
+            // หน่วยที่ "กางดูรายชื่อ" ในเมนูรายงานสถานะ (keyed by ชื่อหน่วย)
+            const [openStatusDepts, setOpenStatusDepts] = useState({});
             const [wardSubGroupInfo, setWardSubGroupInfo] = useState(() => {
                 const saved = localStorage.getItem('nursingApp_wardSubGroupInfo');
                 return saved ? JSON.parse(saved) : {};
@@ -2141,6 +2143,8 @@
                                     const nameCol = staffHeaders[3] || '';
                                     const nameOf = (st) => `${st[prefixCol] || ''} ${st[nameCol] || ''}`.trim() || '(ไม่มีชื่อ)';
                                     const setStatus = (id, val) => setStaffOverrides(prev => ({ ...prev, [id]: { ...(prev[id] || {}), remark: val } }));
+                                    const setField = (id, field, val) => setStaffOverrides(prev => ({ ...prev, [id]: { ...(prev[id] || {}), [field]: val } }));
+                                    const deptNames = departments.map(d => d.name);
                                     // สรุปภาพรวมทุกหน่วย
                                     const summary = {}; let totalReported = 0;
                                     staffList.forEach(st => { const k = classifyStatus((staffOverrides[st._id] || {}).remark); if (k) { summary[k] = (summary[k] || 0) + 1; totalReported++; } });
@@ -2154,26 +2158,66 @@
                                                 const members = staffList.filter(st => String(st[deptCol] || '').trim() === dept.name);
                                                 if (members.length === 0) return null;
                                                 const reported = members.filter(st => classifyStatus((staffOverrides[st._id] || {}).remark)).length;
+                                                const open = !!openStatusDepts[dept.name];
                                                 return (
                                                     <div key={dept.name} className="rounded-2xl border border-teal-100 bg-gradient-to-b from-white to-teal-50/40 shadow-sm overflow-hidden flex flex-col">
-                                                        <div className="mop-gradient text-white px-4 py-2.5 flex items-center justify-between gap-2">
+                                                        <button onClick={() => setOpenStatusDepts(prev => ({ ...prev, [dept.name]: !prev[dept.name] }))}
+                                                            className="mop-gradient text-white px-4 py-2.5 flex items-center justify-between gap-2 w-full text-left hover:brightness-110 transition">
                                                             <span className="font-bold text-sm truncate" title={dept.name}>{dept.name}</span>
-                                                            <span className="shrink-0 text-[11px] font-bold bg-white/20 rounded-full px-2 py-0.5">{reported}/{members.length}</span>
-                                                        </div>
-                                                        <div className="p-2 space-y-1 max-h-72 overflow-auto">
+                                                            <span className="flex items-center gap-2 shrink-0">
+                                                                <span className="text-[11px] font-bold bg-white/20 rounded-full px-2 py-0.5">{reported}/{members.length}</span>
+                                                                <span className={`w-6 h-6 flex items-center justify-center rounded-full bg-white/20 font-bold transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>▾</span>
+                                                            </span>
+                                                        </button>
+                                                        {open && (
+                                                        <div className="p-2 space-y-1 max-h-96 overflow-auto">
                                                             {members.map((st) => {
-                                                                const val = (staffOverrides[st._id] || {}).remark || '';
+                                                                const ov = staffOverrides[st._id] || {};
+                                                                const val = ov.remark || '';
+                                                                const isOut = val.includes('ย้ายออก');
+                                                                const isIn = val.includes('ย้ายเข้า');
                                                                 return (
-                                                                    <div key={st._id} className="flex items-center gap-2 px-1.5 py-1 rounded-lg hover:bg-teal-50/60">
-                                                                        <span className="flex-1 min-w-0 truncate text-[13px] text-slate-700" title={nameOf(st)}>{nameOf(st)}</span>
-                                                                        <select value={val} onChange={(e) => setStatus(st._id, e.target.value)}
-                                                                            className={`shrink-0 w-40 text-[12px] font-semibold rounded-lg border px-1.5 py-1 outline-none focus:ring-2 focus:ring-teal-400 ${val ? 'border-teal-300 bg-teal-50 text-teal-800' : 'border-slate-200 bg-white text-slate-400'}`}>
-                                                                            {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                                                        </select>
+                                                                    <div key={st._id} className="px-1.5 py-1.5 rounded-lg hover:bg-teal-50/60 border-b border-slate-100 last:border-0">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="flex-1 min-w-0 truncate text-[13px] text-slate-700" title={nameOf(st)}>{nameOf(st)}</span>
+                                                                            <select value={val} onChange={(e) => setStatus(st._id, e.target.value)}
+                                                                                className={`shrink-0 w-40 text-[12px] font-semibold rounded-lg border px-1.5 py-1 outline-none focus:ring-2 focus:ring-teal-400 ${val ? 'border-teal-300 bg-teal-50 text-teal-800' : 'border-slate-200 bg-white text-slate-400'}`}>
+                                                                                {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                                                            </select>
+                                                                        </div>
+                                                                        {isOut && (
+                                                                            <div className="mt-1.5 ml-1 flex items-center gap-1.5 text-[12px]">
+                                                                                <span className="text-rose-600 font-semibold shrink-0">ไปที่:</span>
+                                                                                <select value={ov.moveTo || ''} onChange={(e) => setField(st._id, 'moveTo', e.target.value)}
+                                                                                    className="flex-1 min-w-0 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 px-1.5 py-1 outline-none focus:ring-2 focus:ring-rose-300">
+                                                                                    <option value="">— เลือกหน่วยปลายทาง —</option>
+                                                                                    {deptNames.filter(n => n !== dept.name).map(n => <option key={n} value={n}>{n}</option>)}
+                                                                                    <option value="นอกกลุ่มการพยาบาล">นอกกลุ่มการพยาบาล</option>
+                                                                                    <option value="ลาออก/เกษียณ">ลาออก/เกษียณ</option>
+                                                                                </select>
+                                                                            </div>
+                                                                        )}
+                                                                        {isIn && (
+                                                                            <div className="mt-1.5 ml-1 flex flex-wrap items-center gap-1.5 text-[12px]">
+                                                                                <span className="text-emerald-600 font-semibold shrink-0">มาจาก:</span>
+                                                                                <select value={ov.moveFrom || ''} onChange={(e) => setField(st._id, 'moveFrom', e.target.value)}
+                                                                                    className="flex-1 min-w-[120px] rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 px-1.5 py-1 outline-none focus:ring-2 focus:ring-emerald-300">
+                                                                                    <option value="">— เลือกหน่วยต้นทาง —</option>
+                                                                                    {deptNames.filter(n => n !== dept.name).map(n => <option key={n} value={n}>{n}</option>)}
+                                                                                    <option value="นอกกลุ่มการพยาบาล">นอกกลุ่มการพยาบาล</option>
+                                                                                    <option value="บรรจุใหม่">บรรจุใหม่</option>
+                                                                                </select>
+                                                                                <button onClick={() => setField(st._id, 'acceptIn', !ov.acceptIn)}
+                                                                                    className={`shrink-0 px-2 py-1 rounded-lg font-bold border transition ${ov.acceptIn ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-emerald-400' : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'}`}>
+                                                                                    {ov.acceptIn ? '✓ ยืนยันรับแล้ว' : 'ยืนยันรับย้ายเข้า'}
+                                                                                </button>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 );
                                                             })}
                                                         </div>
+                                                        )}
                                                     </div>
                                                 );
                                             })}
